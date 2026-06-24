@@ -233,6 +233,16 @@
   @keyframes sp{to{transform:rotate(360deg)}}
 
   .menu-btn{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:42px;height:42px;border-radius:10px;font-size:20px;flex:none;cursor:pointer}
+  .bell{position:relative;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:42px;height:42px;border-radius:10px;font-size:18px;flex:none;cursor:pointer}
+  .nbadge{position:absolute;top:-6px;left:-6px;background:#FF4D4D;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:20px;display:grid;place-items:center;padding:0 4px;border:2px solid var(--brand)}
+  .notif-panel{display:none;position:fixed;top:64px;left:14px;width:340px;max-width:92vw;max-height:70vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);z-index:60;padding:8px}
+  .notif-panel.show{display:block}
+  .notif-item{display:flex;gap:10px;padding:11px 12px;border-radius:10px;cursor:pointer}
+  .notif-item:hover{background:var(--raised)}
+  .notif-item.unread{background:var(--brand-dim)}
+  .notif-item .nico{font-size:18px;flex:none}
+  .notif-item .ntext{font-size:13px;line-height:1.5}
+  .notif-item .ntime{font-size:10.5px;color:var(--faint);margin-top:3px}
   .ico-m{display:none}
   .scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:45}
   .scrim.show{display:block}
@@ -294,8 +304,10 @@
     <button class="btn ghost" id="addTeacherBtn"><span class="lbl">＋ مدرّس</span><span class="ico-m">🎓</span></button>
     <div class="spacer"></div>
     <div class="search topbar-search"><span style="color:var(--faint)">⌕</span><input id="search" placeholder="ابحث في المحتوى…"></div>
+    <button class="bell" id="bellBtn" aria-label="الإشعارات">🔔<span class="nbadge" id="nbadge" style="display:none">0</span></button>
     <button class="btn primary" id="addBtn"><span class="lbl">＋ بوست جديد</span><span class="ico-m">＋</span></button>
   </div>
+  <div class="notif-panel" id="notifPanel"></div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
     <aside class="side" id="side">
@@ -365,7 +377,7 @@ const LINKS=[
 ];
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
-let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[];
+let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[];
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post';
 
 /* ---------- Auth ---------- */
@@ -453,18 +465,20 @@ async function enterApp(){
     return;
   }
   await reload();
+  await checkWeeklyReview();
   hide('loading'); show('app');
   wireApp(); render();
 }
 async function reload(){
-  const [p,t,c,cm,pl]=await Promise.all([
+  const [p,t,c,cm,pl,nt]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('teachers').select('*'),
     sb.from('cards').select('*').order('created_at',{ascending:false}),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
     sb.from('publish_log').select('*'),
+    sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
   ]);
-  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[];
+  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[]; NOTIFS=nt.data||[];
 }
 
 /* ---------- helpers ---------- */
@@ -473,6 +487,25 @@ const T=id=>TEACHERS.find(x=>x.id===id)||{name:'—',id};
 const ST=id=>STATUSES.find(s=>s.id===id);
 function avaColor(id){const i=PROFILES.findIndex(u=>u.id===id);return AVA[(i+AVA.length)%AVA.length];}
 function initials(n){return (n||'?').replace(/[()م.]/g,'').trim().split(' ')[0].slice(0,2);}
+// أفاتار: صورة لو موجودة، وإلا حروف ملوّنة
+function avaP(id,size){const u=U(id);return avaTag(id,u.name,size,u.avatar_url);}
+function avaT(id,size){const t=T(id);return avaTag(id,t.name,size,t.avatar_url);}
+function avaTag(id,name,size,url){
+  const s=size||24, base=`width:${s}px;height:${s}px;border-radius:50%;display:grid;place-items:center;font-weight:800;flex:none;font-size:${Math.round(s*0.42)}px;`;
+  if(url) return `<span class="ava" style="${base}overflow:hidden;background:#fff"><img src="${escAttr(url)}" style="width:100%;height:100%;object-fit:cover" alt=""></span>`;
+  return `<span class="ava" style="${base}background:${avaColor(id)};color:#0E1014">${initials(name)}</span>`;
+}
+// رفع صورة للتخزين وإرجاع اللينك العام
+async function uploadAvatar(file,prefix){
+  if(!file) return null;
+  if(file.size>3*1024*1024){toast('الصورة كبيرة (أقصى ٣ ميجا)',true);return null;}
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+  const path=`${prefix}-${Date.now()}.${ext}`;
+  const {error}=await sb.storage.from('avatars').upload(path,file,{upsert:true,cacheControl:'3600'});
+  if(error){toast(error.message,true);return null;}
+  const {data}=sb.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl;
+}
 function isLate(c){const done=(c.kind==='task')?(c.status==='done'):(c.status==='published');return !done&&c.due&&c.due<ymd(new Date());}
 
 /* ---------- متابعة النشر اليومي + التقييم ---------- */
@@ -598,9 +631,14 @@ function render(){
   document.getElementById('nBoard').textContent=cs.length;
   document.getElementById('nTeam').textContent=myMembers().length;
   document.getElementById('nLate').textContent=cs.filter(isLate).length;
+  renderBell();
   document.getElementById('meName').textContent=ME.name;
   document.getElementById('meRole').textContent=roleLabel(ME.role)+(ME.role==='lead'?' · '+PROFILES.filter(p=>p.lead_id===ME.id).length+' أعضاء':'');
-  const ma=document.getElementById('meAva');ma.textContent=initials(ME.name);ma.style.background=avaColor(ME.id);
+  const ma=document.getElementById('meAva');
+  if(ME.avatar_url){ma.style.cssText='width:36px;height:36px;border-radius:50%;overflow:hidden;flex:none;cursor:pointer';ma.innerHTML=`<img src="${escAttr(ME.avatar_url)}" style="width:100%;height:100%;object-fit:cover">`;}
+  else{ma.textContent=initials(ME.name);ma.style.background=avaColor(ME.id);ma.style.cursor='pointer';}
+  ma.title='غيّر صورتك';
+  ma.onclick=changeMyPhoto;
   document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
   document.getElementById('navManage').style.display = (ME.role==='admin'||ME.role==='manager')?'flex':'none';
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -659,14 +697,14 @@ function cardHTML(c){
     const req=c.requested_by?U(c.requested_by):null;
     return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill" style="background:var(--raised2);color:var(--muted)">✅ تاسك${req&&req.id!==c.assignee_id?' · من '+req.name:''}</div>
       <div class="ttl">${esc(c.title)}</div>${c.caption?`<div class="meta"><span class="tag plat">${esc(c.caption.slice(0,40))}${c.caption.length>40?'…':''}</span></div>`:''}
-      <div class="foot"><span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><span class="who">${a.name}</span>
+      <div class="foot">${avaP(a.id)}<span class="who">${a.name}</span>
       ${c.due?`<span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span>`:''}</div></div>`;
   }
   const t=T(c.teacher_id);
   return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill">● ${t.name}</div>
     <div class="ttl">${esc(c.title)}</div><div class="meta"><span class="tag cat">${c.category||'—'}</span>
     <span class="tag plat">${PLATS.find(p=>p.id===c.platform)?.name||c.platform||'—'}</span>${c.post_link?`<span class="tag plat">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
-    <div class="foot"><span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><span class="who">${a.name}</span>
+    <div class="foot">${avaP(a.id)}<span class="who">${a.name}</span>
     <span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span></div></div>`;}
 function wireBoard(){
   document.querySelectorAll('.card').forEach(el=>{
@@ -683,7 +721,9 @@ function wireBoard(){
       if(kind==='task'){
         // العضو يحرّك لـ «بيتعمل» بس؛ «خلص» للقائد
         if(ns==='done' && ME.role==='member' && c.assignee_id===ME.id){toast('التيم ليدر هو اللي يأكّد إنها خلصت',true);return;}
-        if(c.status!==ns){c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);}
+        if(c.status!==ns){const wasReq=c.requested_by;c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);
+          if(wasReq && c.assignee_id===ME.id && (ns==='tdoing'||ns==='done')){await notify(wasReq,'task_progress',`${ME.name} ${ns==='done'?'خلّص':'بدأ في'} التاسك: ${c.title}`,c.id);}
+        }
         return;
       }
       if(ME.role==='member'&&(ns==='ready'||ns==='published')&&c.status!=='ready'){toast('الأعضاء بيحوّلوا لـ «محتاج مراجعة» والتيم ليدر يوافق',true);return;}
@@ -736,7 +776,7 @@ function agendaView(){
 function teacherStatChip(t){
   const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
   return `<div class="rank-row" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
-    <span class="ava" style="width:34px;height:34px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+    ${avaT(t.id,34)}
     <div class="rank-main"><div class="nm">${t.name}</div>
       <div class="sub"><span>📤 ${posts} بوست</span><span style="color:${missed?'var(--danger)':'inherit'}">${missed?'⚠ '+missed+' يوم فايت':'✓ ملتزم'}</span></div></div>
     <span style="color:var(--faint)">🔗</span></div>`;
@@ -781,7 +821,7 @@ function detailView(){
          const dt=TEACHERS.filter(t=>t.owner_id===d.id).length;
          const sc=d.role==='member'?memberScore(d.id):null;
          return `<div class="rank-row" style="cursor:pointer" onclick="openPersonDetail('${d.id}')">
-           <span class="ava" style="width:34px;height:34px;background:${avaColor(d.id)}">${initials(d.name)}</span>
+           ${avaP(d.id,34)}
            <div class="rank-main"><div class="nm">${d.name}</div>
              <div class="sub"><span>${roleLabel(d.role)}</span><span>🎓 ${dt} مدرّس</span>${sc&&sc.score!=null?`<span>★ ${sc.score}</span>`:''}</div></div>
            <span style="color:var(--faint)">›</span></div>`;
@@ -805,7 +845,7 @@ function memberCardHTML(mid){
   const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
   const ts=TEACHERS.filter(t=>t.owner_id===mid);
   const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
-  return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${mid}')"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
+  return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${mid}')"><div class="top">${avaP(mid,40)}
     <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div>
     <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
     <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><div class="n">${ts.length}</div><div class="l">مدرّسين</div></div>
@@ -827,7 +867,7 @@ function leaderCardHTML(lid,role){
   const pubCount=allMembers.reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)
     + CARDS.filter(c=>c.assignee_id===lid&&c.status==='published').length;
   return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${lid}')">
-    <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
+    <div class="top">${avaP(lid,40)}
       <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div>
       <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
     <div class="kpi-row"><div class="kpi"><div class="n">${myTeachers}</div><div class="l">ماسك مدرّسين</div></div>
@@ -869,7 +909,7 @@ function teacherCardHTML(t){
   const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
   const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
   return `<div class="member" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
-    <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+    <div class="top">${avaT(t.id,40)}
       <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'} · راحة ${restName}</div></div>
       <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
     <div class="kpi-row"><div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
@@ -913,7 +953,7 @@ function lateView(){
   if(!cs.length)return head+`<div class="empty"><div class="big">✓</div>مفيش حاجة متأخرة.</div>`;
   return head+`<div style="max-width:780px;display:flex;flex-direction:column;gap:10px">${cs.map(c=>{const a=U(c.assignee_id);
     return `<div class="card" data-id="${c.id}" onclick="openCard('${c.id}')" style="cursor:pointer;margin:0"><div style="display:flex;align-items:center;gap:12px">
-      <span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><div style="flex:1"><div class="ttl" style="margin:0">${esc(c.title)}</div>
+      ${avaP(a.id)}<div style="flex:1"><div class="ttl" style="margin:0">${esc(c.title)}</div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:3px">${T(c.teacher_id).name} · ${a.name} · ${ST(c.status).name}</div></div>
       <span class="due late">⚠ ${dueLabel(c.due)}</span></div></div>`;}).join('')}</div>`;
 }
@@ -941,7 +981,7 @@ function membersRank(){
     const medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'';
     return `<div class="rank-row ${pos<=3&&!isNew?'top':''}">
       <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
-      <span class="ava" style="width:38px;height:38px;font-size:14px;background:${avaColor(r.id)}">${initials(u.name)}</span>
+      ${avaP(r.id,38)}
       <div class="rank-main"><div class="nm">${u.name}</div>
         <div class="sub">
           <span>📤 ${r.posts} بوست</span>
@@ -962,7 +1002,7 @@ function teachersTracking(){
     const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length, owner=U(t.owner_id);
     const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
     return `<div class="member">
-      <div class="top"><span class="ava" style="width:38px;height:38px;font-size:13px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+      <div class="top">${avaT(t.id,38)}
         <div><div class="name">${t.name}</div><div class="role">المسؤول: ${owner.name} · راحة: ${restName}</div></div></div>
       <div class="kpi-row">
         <div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
@@ -1058,7 +1098,7 @@ function manageView(){
         <button class="btn ghost" style="height:34px;font-size:12.5px;border-color:var(--danger);color:var(--danger)" onclick="deleteMember('${p.id}')">🗑 مسح</button>
       </div>` : '';
     return `<div class="member" style="${suspended?'opacity:.55':''}">
-      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(p.id)}">${initials(p.name)}</span>
+      <div class="top">${avaP(p.id,40)}
         <div><div class="name">${p.name} ${suspended?'<span class="miss-badge" style="background:var(--raised2);color:var(--muted)">موقوف</span>':''}</div><div class="role">${roleLabel(p.role)}</div></div></div>
       <div class="field" style="margin-bottom:12px"><label>الدور</label>
         <select onchange="setRole('${p.id}',this.value)">${roleOpts}</select></div>
@@ -1077,7 +1117,7 @@ function manageView(){
   if(teacherList.length){
     body+=`<div class="nav-group-label" style="color:var(--muted);margin:24px 4px 10px;font-size:13px">توزيع المدرّسين (${teacherList.length})</div>
     <div class="grid3">${teacherList.map(t=>`<div class="member">
-      <div class="top"><span class="ava" style="width:38px;height:38px;font-size:13px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+      <div class="top">${avaT(t.id,38)}
         <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'}</div></div></div>
       <div class="field"><label>المسؤول عنه</label>
         <select onchange="setTeacherOwner('${t.id}',this.value)">
@@ -1130,7 +1170,6 @@ window.renameMember=async function(id){
   if(error)return toast(error.message,true);
   await reload();render();toast('اتعدّل الاسم');
 };
-
 /* ---------- add / edit teacher ---------- */
 window.openTeacher=function(tid){
   const t=tid?T(tid):null;
@@ -1147,13 +1186,20 @@ window.openTeacher=function(tid){
     </select></div>
     <div class="field"><label>يوم الراحة (مايتحاسبش عليه)</label><select id="t_rest">
       ${['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'].map((d,i)=>`<option value="${i}" ${(t?(t.rest_day==null?5:t.rest_day):5)===i?'selected':''}>${d}</option>`).join('')}
-    </select></div>`;
+    </select></div>
+    <div class="field"><label>صورة المدرّس (اختياري)</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="t_avaPrev">${t?avaT(t.id,48):avaTag('new','?',48,null)}</span>
+        <input type="file" id="t_photo" accept="image/*" style="font-size:12px">
+      </div></div>`;
   let acts=`<button class="btn primary" id="t_save">${t?'حفظ':'إضافة المدرّس'}</button>`;
   if(t && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id))) acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
   document.getElementById('mFoot').innerHTML=acts;
   document.getElementById('t_save').onclick=async()=>{
     const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
     const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner'),rest_day:+val('t_rest')};
+    const pf=document.getElementById('t_photo').files[0];
+    if(pf){toast('بترفع الصورة…');const url=await uploadAvatar(pf,'teacher-'+(t?t.id:Date.now()));if(url)data.avatar_url=url;}
     let error;
     if(t){
       if(t.owner_id!==data.owner_id) data.assigned_at=ymd(new Date()); // اتنقل لموظف تاني → نبدأ المتابعة من النهارده
@@ -1192,12 +1238,49 @@ function linkTreeView(){
       <div><div class="nm">${l.name}</div><div class="sub">${esc(url.replace(/^https?:\/\//,''))}</div></div>
       <span class="arr">↗</span></a>`;
   }).join('');
-  return `<div class="page-head"><div>
-      <div class="page-title">${t.name}</div>
-      <div class="page-sub">لينكات المدرّس · المسؤول: ${owner.name}</div></div>
+  return `<div class="page-head"><div style="display:flex;align-items:center;gap:14px">
+      <span ${editable?`style="cursor:pointer" onclick="changeTeacherPhoto('${t.id}')" title="غيّر صورة المدرّس"`:''}>${avaT(t.id,64)}</span>
+      <div><div class="page-title">${t.name}</div>
+      <div class="page-sub">لينكات المدرّس · المسؤول: ${owner.name}${editable?' · دوس على الصورة تغيّرها':''}</div></div></div>
       ${editable?`<button class="btn" onclick="openTeacher('${t.id}')">⚙ تعديل المدرّس</button> <button class="btn primary" onclick="editLinks('${t.id}')">✎ تعديل اللينكات</button>`:''}</div>
     <div class="lt-wrap">${cards}</div>`;
 }
+// مكتبة أفاتارات جاهزة (إيموجي على خلفيات بالهوية)
+const AVATAR_PRESETS=['😎','🦅','⚽','📚','🔥','🎯','🚀','⭐','🧠','💡','🎨','📈','👑','🏆','⚡','🌟','🦁','🐺','🎬','🎓'];
+const AVATAR_BGS=['#1B2A4A','#2563EB','#0EA5E9','#16A34A','#EA580C','#DC2626','#7C3AED','#DB2777','#0891B2','#CA8A04'];
+function presetUrl(emoji,bg){
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='${bg}'/><text x='100' y='105' font-size='110' text-anchor='middle' dominant-baseline='central'>${emoji}</text></svg>`;
+  return 'data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+}
+// نافذة اختيار: رفع صورة / أفاتار جاهز / مسح
+function photoPicker(title,currentUrl,onPick){
+  document.getElementById('mTitle').textContent=title;
+  const grid=AVATAR_PRESETS.map((e,i)=>{const bg=AVATAR_BGS[i%AVATAR_BGS.length];const u=presetUrl(e,bg);
+    return `<span class="pp" data-url="${escAttr(u)}" style="cursor:pointer;width:52px;height:52px;border-radius:50%;overflow:hidden;display:inline-block;border:2px solid transparent"><img src="${u}" style="width:100%;height:100%"></span>`;}).join('');
+  document.getElementById('mBody').innerHTML=`
+    <div class="field"><label>ارفع صورة من جهازك</label><input type="file" id="pp_file" accept="image/*"></div>
+    <div class="field"><label>أو اختار أفاتار جاهز</label><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">${grid}</div></div>`;
+  document.getElementById('mFoot').innerHTML=`${currentUrl?'<button class="danger-link" id="pp_remove" style="background:none;border:none">🗑 شيل الصورة</button>':''}`;
+  document.querySelectorAll('.pp').forEach(s=>s.onclick=()=>{closeModal();onPick(s.dataset.url);});
+  document.getElementById('pp_file').onchange=async()=>{const f=document.getElementById('pp_file').files[0];if(!f)return;toast('بترفع…');const url=await uploadAvatar(f,'img-'+Date.now());if(url){closeModal();onPick(url);}};
+  if(currentUrl)document.getElementById('pp_remove').onclick=()=>{closeModal();onPick(null);};
+  document.getElementById('overlay').classList.add('show');
+}
+window.changeMyPhoto=function(){
+  photoPicker('صورتك',ME.avatar_url,async(url)=>{
+    const {error}=await sb.from('profiles').update({avatar_url:url}).eq('id',ME.id);
+    if(error)return toast(error.message,true);
+    ME.avatar_url=url;await reload();render();toast(url?'اتغيّرت صورتك':'اتشالت الصورة');
+  });
+};
+window.changeTeacherPhoto=function(tid){
+  const t=T(tid);
+  photoPicker('صورة المدرّس — '+t.name,t.avatar_url,async(url)=>{
+    const {error}=await sb.from('teachers').update({avatar_url:url}).eq('id',tid);
+    if(error)return toast(error.message,true);
+    await reload();render();toast(url?'اتغيّرت الصورة':'اتشالت الصورة');
+  });
+};
 window.editLinks=function(tid){
   const t=T(tid);
   document.getElementById('mTitle').textContent='تعديل لينكات — '+t.name;
@@ -1298,6 +1381,8 @@ window.openCard=function(id,newKind){
     if(c)({error}=await sb.from('cards').update(data).eq('id',c.id));
     else ({error}=await sb.from('cards').insert({...data,created_by:ME.id}));
     if(error)return toast(error.message,true);
+    // إشعار: تاسك مطلوبة من قائد لعضو
+    if(!c && isTask && data.requested_by){ await notify(data.assignee_id,'task_assigned',`${ME.name} بعتلك تاسك: ${t}${data.due?' — تسليمها '+data.due:''}`,null); }
     if(!isTask && cur==='published' && !wasPub){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:c?c.id:null}); }
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
   };
@@ -1305,7 +1390,9 @@ window.openCard=function(id,newKind){
     document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready'}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
     document.getElementById('f_return').onclick=async()=>{const note=prompt('سبب الرجوع:');if(note===null)return;
       if(note.trim())await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:'↩ '+note.trim()});
-      await sb.from('cards').update({status:'doing'}).eq('id',c.id);await reload();closeModal();render();toast('رجع بملاحظة');};
+      await sb.from('cards').update({status:'doing'}).eq('id',c.id);
+      await notify(c.assignee_id,'post_returned',`${ME.name} رجّع البوست «${c.title}» للتعديل${note.trim()?': '+note.trim():''}`,c.id);
+      await reload();closeModal();render();toast('رجع بملاحظة');};
   }
   if(c && !taskLocked)document.getElementById('f_del').onclick=async()=>{if(confirm('متأكد تمسح؟')){await sb.from('cards').delete().eq('id',c.id);await reload();closeModal();render();toast('اتمسحت');}};
   document.getElementById('overlay').classList.add('show');
@@ -1316,6 +1403,53 @@ function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':
 function escAttr(s){return (s||'').replace(/"/g,'&quot;');}
 let toastT;function toast(m,bad){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('bad',!!bad);t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400);}
 
+/* ---------- notifications 🔔 ---------- */
+async function notify(userId,type,text,cardId){
+  if(!userId||userId===ME.id) return; // مش بنبعت لنفسنا
+  await sb.from('notifications').insert({user_id:userId,actor_id:ME.id,type,text,card_id:cardId||null});
+}
+function renderBell(){
+  const unread=NOTIFS.filter(n=>!n.is_read).length;
+  const b=document.getElementById('nbadge');
+  if(b){ b.textContent=unread; b.style.display=unread?'grid':'none'; }
+}
+function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':'🔔';}
+function timeAgo(ts){const s=Math.floor((Date.now()-new Date(ts))/1000);
+  if(s<60)return'دلوقتي';if(s<3600)return Math.floor(s/60)+' د';if(s<86400)return Math.floor(s/3600)+' س';return Math.floor(s/86400)+' ي';}
+function toggleNotifPanel(){
+  const p=document.getElementById('notifPanel');
+  if(p.classList.contains('show')){p.classList.remove('show');return;}
+  p.innerHTML = NOTIFS.length ? (
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px"><b style="font-size:13px">الإشعارات</b>${NOTIFS.some(n=>!n.is_read)?'<span style="font-size:11.5px;color:var(--brand);cursor:pointer" onclick="markAllRead()">تعليم الكل مقروء</span>':''}</div>`
+    + NOTIFS.map(n=>`<div class="notif-item ${n.is_read?'':'unread'}" onclick="openNotif('${n.id}','${n.card_id||''}')">
+        <span class="nico">${notifIco(n.type)}</span>
+        <div><div class="ntext">${esc(n.text)}</div><div class="ntime">${timeAgo(n.created_at)}</div></div></div>`).join('')
+  ) : '<div style="padding:24px;text-align:center;color:var(--faint);font-size:13px">مفيش إشعارات</div>';
+  p.classList.add('show');
+}
+window.openNotif=async function(id,cardId){
+  const n=NOTIFS.find(x=>x.id===id);
+  if(n&&!n.is_read){await sb.from('notifications').update({is_read:true}).eq('id',id);n.is_read=true;renderBell();}
+  document.getElementById('notifPanel').classList.remove('show');
+  if(cardId){const c=CARDS.find(x=>x.id===cardId); if(c){boardKind=c.kind||'post';view='board';render();setTimeout(()=>openCard(cardId),50);}}
+};
+window.markAllRead=async function(){
+  await sb.from('notifications').update({is_read:true}).eq('user_id',ME.id).eq('is_read',false);
+  NOTIFS.forEach(n=>n.is_read=true);renderBell();toggleNotifPanel();toggleNotifPanel();
+};
+// تذكير المراجعة الأسبوعية (الخميس) للتيم ليدر/الأكونت مانجر
+async function checkWeeklyReview(){
+  if(ME.role!=='lead'&&ME.role!=='manager')return;
+  if(new Date().getDay()!==4)return; // 4 = الخميس
+  // مبعتش قبل كده الأسبوع ده؟
+  const weekAgo=new Date(Date.now()-6*864e5).toISOString();
+  const already=NOTIFS.some(n=>n.type==='weekly_review'&&n.created_at>weekAgo);
+  if(already)return;
+  await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:'weekly_review',text:'🗓 مراجعة الأسبوع: راجع شغل فريقك وقيّم أداءهم الأسبوع ده.'});
+  const {data}=await sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50);
+  NOTIFS=data||NOTIFS;
+}
+
 /* ---------- wiring ---------- */
 function wireApp(){
   const side=document.getElementById('side'), scrim=document.getElementById('scrim');
@@ -1323,6 +1457,8 @@ function wireApp(){
   const closeDrawer=()=>{side.classList.remove('open');scrim.classList.remove('show');};
   document.getElementById('menuBtn').onclick=openDrawer;
   scrim.onclick=closeDrawer;
+  document.getElementById('bellBtn').onclick=(e)=>{e.stopPropagation();toggleNotifPanel();};
+  document.addEventListener('click',e=>{const p=document.getElementById('notifPanel');if(p&&p.classList.contains('show')&&!p.contains(e.target)&&e.target.id!=='bellBtn')p.classList.remove('show');});
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;closeDrawer();render();});
   document.getElementById('addBtn').onclick=()=>openCard(null,boardKind);
   document.getElementById('addTeacherBtn').onclick=()=>openTeacher(null);
