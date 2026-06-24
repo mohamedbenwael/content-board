@@ -171,6 +171,28 @@
   .lt-card .arr{margin-inline-start:auto;color:var(--faint);font-size:20px}
   .lt-empty{background:var(--panel);border:1px dashed var(--line2);border-radius:var(--radius);padding:18px;color:var(--muted);text-align:center;font-size:13px;margin-bottom:12px}
 
+  /* leaderboard + tracking */
+  .miss-badge{font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px;background:var(--danger-dim);color:var(--danger);margin-inline-start:6px}
+  .rank-row{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin-bottom:10px}
+  .rank-row.top{border-color:var(--brand);box-shadow:var(--shadow)}
+  .rank-pos{width:38px;height:38px;flex:none;border-radius:10px;display:grid;place-items:center;font-weight:900;font-size:16px;background:var(--raised2);color:var(--muted)}
+  .rank-pos.g1{background:#FFE9B0;color:#8a6a12}.rank-pos.g2{background:#E3E8EF;color:#5a6573}.rank-pos.g3{background:#F4D9C2;color:#8a5a30}
+  .rank-main{flex:1;min-width:0}
+  .rank-main .nm{font-weight:800;font-size:15px}
+  .rank-main .sub{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+  .rank-score{text-align:center;flex:none}
+  .rank-score .n{font-size:26px;font-weight:900;line-height:1}
+  .rank-score .l{font-size:10px;color:var(--muted);font-weight:700}
+  .seg-tabs{display:inline-flex;background:var(--raised);border:1px solid var(--line2);border-radius:10px;padding:3px;gap:3px;margin-bottom:18px}
+  .seg-tabs button{padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;color:var(--muted)}
+  .seg-tabs button.on{background:var(--brand);color:#fff}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px;max-width:280px}
+  .cal .d{aspect-ratio:1;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700}
+  .cal .d.ok{background:#DDF3E6;color:#1d8a52}
+  .cal .d.miss{background:var(--danger-dim);color:var(--danger)}
+  .cal .d.rest{background:var(--raised2);color:var(--faint)}
+  .cal .d.future{background:transparent;color:var(--faint)}
+
   .feed{max-width:780px}
   .empty{text-align:center;color:var(--muted);padding:60px 20px}
   .empty .big{font-size:40px;margin-bottom:12px;opacity:.5}
@@ -247,7 +269,9 @@
       <div class="nav-group-label">المساحة</div>
       <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
       <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
+      <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
       <button class="nav-item" data-view="late"><span class="ico">⏱</span> المتأخرات <span class="count" id="nLate"></span></button>
+      <button class="nav-item" data-view="rank"><span class="ico">★</span> التقييم والترتيب</button>
       <button class="nav-item" data-view="reports"><span class="ico">▤</span> التقارير</button>
       <div class="nav-group-label">النطاق</div>
       <button class="nav-item" id="scopeReset"><span class="ico">◎</span> كل المدرّسين</button>
@@ -307,7 +331,7 @@ const LINKS=[
 ];
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
-let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[];
+let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[];
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null;
 
 /* ---------- Auth ---------- */
@@ -384,13 +408,14 @@ async function enterApp(){
   wireApp(); render();
 }
 async function reload(){
-  const [p,t,c,cm]=await Promise.all([
+  const [p,t,c,cm,pl]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('teachers').select('*'),
     sb.from('cards').select('*').order('created_at',{ascending:false}),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
+    sb.from('publish_log').select('*'),
   ]);
-  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[];
+  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[];
 }
 
 /* ---------- helpers ---------- */
@@ -400,16 +425,107 @@ const ST=id=>STATUSES.find(s=>s.id===id);
 function avaColor(id){const i=PROFILES.findIndex(u=>u.id===id);return AVA[(i+AVA.length)%AVA.length];}
 function initials(n){return (n||'?').replace(/[()م.]/g,'').trim().split(' ')[0].slice(0,2);}
 function isLate(c){return c.status!=='published'&&c.due&&c.due<new Date().toISOString().slice(0,10);}
+
+/* ---------- متابعة النشر اليومي + التقييم ---------- */
+function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);}
+function ymd(d){return d.toISOString().slice(0,10);}
+// الأيام المطلوب فيها نشر للمدرّس من أول الشهر لإمبارح (بنستثني يوم الراحة واليوم الحالي)
+function expectedDays(teacher){
+  const rest = (teacher.rest_day==null?5:teacher.rest_day);
+  const days=[]; const today=new Date(); today.setHours(0,0,0,0);
+  let d=new Date(monthStart());
+  while(d < today){ // لحد إمبارح (اليوم الحالي لسه بيتنشر فيه)
+    if(d.getDay()!==rest) days.push(ymd(d));
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  return days;
+}
+// أيام نزل فيها فعلاً نشر للمدرّس (من السجل، الشهر الحالي)
+function publishedDays(teacherId){
+  const ms=ymd(monthStart());
+  return new Set(PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=ms).map(l=>l.pub_date));
+}
+// الأيام الفايتة لمدرّس (مطلوبة وما نزلش فيها)
+function missedDaysForTeacher(teacherId){
+  const t=T(teacherId); if(!t||!t.id) return [];
+  const done=publishedDays(teacherId);
+  return expectedDays(t).filter(d=>!done.has(d));
+}
+// إجمالي بوستات الشهر لمدرّس
+function teacherPosts(teacherId){
+  const ms=ymd(monthStart());
+  return PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=ms).length;
+}
+// إجمالي بوستات العضو الشهر (كل مدرّسينه)
+function memberPosts(memberId){
+  const ms=ymd(monthStart());
+  return PUBLOG.filter(l=>l.member_id===memberId && l.pub_date>=ms).length;
+}
+// إجمالي الأيام الفايتة عبر كل مدرّسين العضو
+function memberMissed(memberId){
+  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+missedDaysForTeacher(t.id).length,0);
+}
+function memberTeacherBreakdown(memberId){
+  return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:missedDaysForTeacher(t.id).length}));
+}
+// نقطة تقييم العضو (الشهر) — ميعاد40 إنتاجية30 جودة20 خصم10
+function memberScore(memberId){
+  const ms=ymd(monthStart());
+  const cards=CARDS.filter(c=>c.assignee_id===memberId);
+  const published=cards.filter(c=>c.status==='published');
+  const expectedTotal=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
+  const posts=memberPosts(memberId);
+  const missed=memberMissed(memberId);
+  // عضو جديد / لسه مفيش بيانات كافية
+  if(expectedTotal<3 && posts<3) return {score:null, posts, missed, onTimeRate:null, returns:0};
+  // الميعاد: نسبة أيام النشر المنفّذة من المطلوبة
+  const onTimeRate = expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : 1;
+  // الإنتاجية: بوستات منفّذة مقارنة بالمتوقّع (سقف 100%)
+  const productivity = expectedTotal? Math.min(1, posts/expectedTotal) : (posts>0?1:0);
+  // الجودة: نسبة اللي عدّى من غير ما يترجّع (نحسب الرجوعات من التعليقات اللي فيها ↩)
+  const returns = COMMENTS.filter(cm=>cm.text&&cm.text.startsWith('↩') && cards.some(c=>c.id===cm.card_id)).length;
+  const handled = published.length + returns;
+  const quality = handled? Math.max(0,(published.length)/handled) : 1;
+  // خصم المتأخرات: كل متأخر بيخصم
+  const lateCount = cards.filter(isLate).length;
+  const penalty = Math.min(1, lateCount*0.1);
+  const score = Math.round((onTimeRate*40 + productivity*30 + quality*20 + (1-penalty)*10));
+  return {score, posts, missed, onTimeRate:Math.round(onTimeRate*100), returns, productivity:Math.round(productivity*100)};
+}
+// تسجيل نشر في السجل (مرة واحدة لكل كارت في اليوم)
+async function recordPublish(card){
+  if(!card.teacher_id) return;
+  const today=ymd(new Date());
+  // امنع التكرار لو الكارت ده اتسجّل قبل كده
+  if(card.id && PUBLOG.some(l=>l.card_id===card.id)) return;
+  await sb.from('publish_log').insert({card_id:card.id||null, teacher_id:card.teacher_id, member_id:card.assignee_id||ME.id, pub_date:today});
+}
 function dueLabel(d){if(!d)return'—';const days=Math.round((new Date(d)-new Date(new Date().toISOString().slice(0,10)))/864e5);
   if(days===0)return'النهاردة';if(days<0)return'متأخر '+(-days)+'ي';if(days===1)return'بكرة';return'بعد '+days+'ي';}
-function roleLabel(r){return r==='admin'?'أدمن':r==='lead'?'تيم ليدر':'عضو';}
-function myMembers(){ // member ids visible to me
+function roleLabel(r){return r==='admin'?'أدمن':r==='manager'?'أكونت مانجر':r==='lead'?'تيم ليدر':'عضو';}
+function roleRank(r){return r==='admin'?3:r==='manager'?2:r==='lead'?1:0;}
+// كل الـ IDs اللي تحتي في الشجرة (بأي عمق) — مش بياخد نفسي
+function descendantIds(){
+  const out=new Set(); let frontier=[ME.id];
+  while(frontier.length){
+    const next=[];
+    PROFILES.forEach(p=>{ if(p.lead_id && frontier.includes(p.lead_id) && !out.has(p.id)){ out.add(p.id); next.push(p.id);} });
+    frontier=next;
+  }
+  return [...out];
+}
+function myMembers(){ // member ids visible to me (للتقييم والليدر بورد)
   if(ME.role==='admin')return PROFILES.filter(p=>p.role==='member').map(p=>p.id);
-  if(ME.role==='lead')return PROFILES.filter(p=>p.lead_id===ME.id).map(p=>p.id);
-  return [ME.id];
+  return descendantIds().filter(id=>U(id).role==='member');
+}
+// كل الناس اللي ممكن يمسكوا مدرّسين/كروت في نطاقي (أي دور)
+function scopeIds(){
+  if(ME.role==='admin') return PROFILES.map(p=>p.id);
+  if(ME.role==='member') return [ME.id];
+  return [ME.id, ...descendantIds()];
 }
 function visibleCards(){
-  const ids=myMembers(); let cs=CARDS.filter(c=>ids.includes(c.assignee_id)||c.assignee_id===ME.id);
+  const ids=scopeIds(); let cs=CARDS.filter(c=>ids.includes(c.assignee_id));
   if(ME.role==='member') cs=CARDS.filter(c=>c.assignee_id===ME.id);
   if(scopeTeacher) cs=cs.filter(c=>c.teacher_id===scopeTeacher);
   if(filterCat) cs=cs.filter(c=>c.category===filterCat);
@@ -431,21 +547,26 @@ function render(){
   document.getElementById('meRole').textContent=roleLabel(ME.role)+(ME.role==='lead'?' · '+PROFILES.filter(p=>p.lead_id===ME.id).length+' أعضاء':'');
   const ma=document.getElementById('meAva');ma.textContent=initials(ME.name);ma.style.background=avaColor(ME.id);
   document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
+  document.getElementById('navManage').style.display = ME.role==='admin'?'flex':'none';
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   renderTeacherNav();
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
   else if(view==='team')main.innerHTML=teamView();
+  else if(view==='manage')main.innerHTML=manageView();
   else if(view==='late')main.innerHTML=lateView();
   else if(view==='reports')main.innerHTML=reportsView();
+  else if(view==='rank')main.innerHTML=rankView();
   else if(view==='linktree')main.innerHTML=linkTreeView();
   if(view==='board')wireBoard();
 }
 function renderTeacherNav(){
-  const ids=myMembers();const ts=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
-  document.getElementById('teacherNav').innerHTML=ts.map(t=>`<div class="tnav-row">
-    <button class="nav-item ${scopeTeacher===t.id?'active':''}" data-teacher="${t.id}"><span class="ico">●</span> ${t.name}</button>
-    <button class="tnav-link" data-link="${t.id}" title="لينكات المدرّس">🔗</button></div>`).join('');
+  const ids=scopeIds();const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  document.getElementById('teacherNav').innerHTML=ts.map(t=>{
+    const miss=missedDaysForTeacher(t.id).length;
+    return `<div class="tnav-row">
+    <button class="nav-item ${scopeTeacher===t.id?'active':''}" data-teacher="${t.id}"><span class="ico">●</span> ${t.name}${miss?`<span class="miss-badge">${miss}</span>`:''}</button>
+    <button class="tnav-link" data-link="${t.id}" title="لينكات المدرّس">🔗</button></div>`;}).join('');
   document.querySelectorAll('[data-teacher]').forEach(b=>b.onclick=()=>{scopeTeacher=scopeTeacher===b.dataset.teacher?null:b.dataset.teacher;view='board';render();});
   document.querySelectorAll('[data-link]').forEach(b=>b.onclick=()=>{linkTeacher=b.dataset.link;view='linktree';render();});
 }
@@ -459,7 +580,7 @@ function statStrip(cs){
 }
 function boardView(){
   const cs=visibleCards();const scopeName=scopeTeacher?T(scopeTeacher).name:'كل المدرّسين في نطاقك';
-  const ids=myMembers();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
+  const ids=scopeIds();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
   let hint='';
   if(myTeachers.length===0){
     hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم الأدمن يضيفلك مدرّسين.'}</div>`;
@@ -490,7 +611,7 @@ function wireBoard(){
     col.addEventListener('drop',async e=>{e.preventDefault();col.classList.remove('drop');
       const id=e.dataTransfer.getData('id'),ns=col.dataset.status,c=CARDS.find(x=>x.id===id);if(!c)return;
       if(ME.role==='member'&&(ns==='ready'||ns==='published')&&c.status!=='ready'){toast('الأعضاء بيحوّلوا لـ «محتاج مراجعة» والتيم ليدر يوافق',true);return;}
-      if(c.status!==ns){c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);}
+      if(c.status!==ns){const wasPub=c.status==='published';c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);if(ns==='published'&&!wasPub){await recordPublish(c);await reload();render();}}
     });
   });
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
@@ -498,13 +619,14 @@ function wireBoard(){
 function teamView(){
   if(ME.role==='member')return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">العرض ده للتيم ليدر والإدارة</div></div></div>
     <div class="empty"><div class="big">⚑</div>إنت داخل كعضو — تشوف شغلك في البورد.</div>`;
-  const ids=myMembers();const cards=m=>CARDS.filter(c=>c.assignee_id===m);
-  const cells=ids.map(mid=>{const m=U(mid),cs=cards(mid),active=cs.filter(c=>c.status!=='published');
+  const cards=m=>CARDS.filter(c=>c.assignee_id===m);
+  // كارت العضو (بمؤشرات الأداء)
+  const memberCard=mid=>{
+    const m=U(mid),cs=cards(mid),active=cs.filter(c=>c.status!=='published');
     const delivered=cs.filter(c=>c.status==='ready'||c.status==='published').length,late=cs.filter(isLate).length;
     const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
     const ts=TEACHERS.filter(t=>t.owner_id===mid);
     const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
-    const adminCtl=ME.role==='admin'?`<span class="role-badge" onclick="promote('${mid}')">⇧ رقّي / غيّر الدور</span>`:'';
     return `<div class="member"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
       <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div></div>
       <div class="kpi-row"><div class="kpi"><div class="n">${active.length}</div><div class="l">شغل حالي</div></div>
@@ -513,8 +635,37 @@ function teamView(){
       <div class="wl"><div class="lbl"><span>عبء الشغل</span><span class="mono">${active.length} مهمة</span></div><div class="track">${seg||'<i style="width:100%;background:var(--raised2)"></i>'}</div></div>
       <div class="wl" style="margin-top:12px"><div class="lbl"><span>التسليم في الميعاد</span><span class="mono">${onTimeRate}%</span></div>
       <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div>
-      <div class="teach-list">${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'} ${adminCtl}</div></div>`;}).join('');
-  return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">${ME.role==='admin'?'كل الأعضاء':'أعضاء تيمك'}</div></div></div><div class="grid3">${cells}</div>`;
+      <div class="teach-list">${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'}</div></div>`;
+  };
+  // كارت تيم ليدر / أكونت مانجر (مبسّط)
+  const leaderCard=(lid,role)=>{
+    const l=U(lid);
+    const directs=PROFILES.filter(p=>p.lead_id===lid);
+    const subLabel = role==='manager'?'تيم ليدرز':'أعضاء';
+    const parent = U(l.lead_id);
+    return `<div class="member"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
+      <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div></div>
+      <div class="kpi-row"><div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
+      <div class="kpi"><div class="n">${descendantsOf(lid).filter(id=>U(id).role==='member').length}</div><div class="l">إجمالي الأعضاء</div></div>
+      <div class="kpi"><div class="n">${descendantsOf(lid).filter(id=>U(id).role==='member').reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)}</div><div class="l">منشور</div></div></div>
+      <div class="teach-list">${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه فاضي</span>'}</div></div>`;
+  };
+  // النطاق: الأدمن يشوف الكل؛ غيره يشوف مرؤوسيه
+  const scope = ME.role==='admin' ? PROFILES.filter(p=>p.id!==ME.id) : PROFILES.filter(p=>descendantIds().includes(p.id));
+  const managers=scope.filter(p=>p.role==='manager');
+  const leads=scope.filter(p=>p.role==='lead');
+  const members=scope.filter(p=>p.role==='member');
+  let body='';
+  if(managers.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:6px 4px 10px;font-size:13px">أكونت مانجرز (${managers.length})</div><div class="grid3">${managers.map(m=>leaderCard(m.id,'manager')).join('')}</div>`;
+  if(leads.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">تيم ليدرز (${leads.length})</div><div class="grid3">${leads.map(l=>leaderCard(l.id,'lead')).join('')}</div>`;
+  if(members.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">أعضاء (${members.length})</div><div class="grid3">${members.map(m=>memberCard(m.id)).join('')}</div>`;
+  if(!body) body=`<div class="empty"><div class="big">⚑</div>لسه مفيش حد في فريقك.</div>`;
+  return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">${ME.role==='admin'?'كل الفريق بكل المستويات':ME.role==='manager'?'تيم ليدرز وأعضاء تحتك':'أعضاء تيمك'}</div></div></div>${body}`;
+}
+function descendantsOf(rootId){
+  const out=new Set(); let frontier=[rootId];
+  while(frontier.length){const next=[];PROFILES.forEach(p=>{if(p.lead_id&&frontier.includes(p.lead_id)&&!out.has(p.id)){out.add(p.id);next.push(p.id);}});frontier=next;}
+  return [...out];
 }
 function lateView(){
   const cs=visibleCards().filter(isLate).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
@@ -526,6 +677,83 @@ function lateView(){
       <div style="font-size:11.5px;color:var(--muted);margin-top:3px">${T(c.teacher_id).name} · ${a.name} · ${ST(c.status).name}</div></div>
       <span class="due late">⚠ ${dueLabel(c.due)}</span></div></div>`;}).join('')}</div>`;
 }
+
+/* ---------- التقييم والترتيب + متابعة النشر ---------- */
+let rankTab='members';
+function rankView(){
+  const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
+  const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
+    <div class="page-sub">شغل شهر ${monthName} · ميعاد ٤٠٪ + إنتاجية ٣٠٪ + جودة ٢٠٪ + التزام ١٠٪</div></div></div>
+    <div class="seg-tabs">
+      <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
+      <button class="${rankTab==='teachers'?'on':''}" onclick="rankTab='teachers';render()">متابعة المدرّسين</button>
+    </div>`;
+  return head + (rankTab==='members'? membersRank() : teachersTracking());
+}
+function membersRank(){
+  const ids=myMembers();
+  if(ids.length===0) return `<div class="empty"><div class="big">★</div>لسه مفيش أعضاء بشغل. أول ما يبدأوا ينزّلوا محتوى هيظهر ترتيبهم هنا.</div>`;
+  const rows=ids.map(id=>({id,...memberScore(id)})).sort((a,b)=>(b.score??-1)-(a.score??-1));
+  let pos=0;
+  return rows.map(r=>{
+    const u=U(r.id); pos++;
+    const isNew=r.score===null;
+    const medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'';
+    return `<div class="rank-row ${pos<=3&&!isNew?'top':''}">
+      <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
+      <span class="ava" style="width:38px;height:38px;font-size:14px;background:${avaColor(r.id)}">${initials(u.name)}</span>
+      <div class="rank-main"><div class="nm">${u.name}</div>
+        <div class="sub">
+          <span>📤 ${r.posts} بوست</span>
+          <span style="color:${r.missed?'var(--danger)':'inherit'}">${r.missed?'⚠ فوّت '+r.missed+' يوم':'✓ ملتزم'}</span>
+          ${r.onTimeRate!=null?`<span>⏱ التزام ${r.onTimeRate}٪</span>`:''}
+          ${r.returns?`<span>↩ رجع ${r.returns}</span>`:''}
+        </div></div>
+      <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l">${isNew?'لسه بيتقيّم':'من ١٠٠'}</div></div>
+    </div>`;
+  }).join('');
+}
+function scoreColor(s){return s>=80?'var(--ready)':s>=55?'var(--doing)':'var(--danger)';}
+function teachersTracking(){
+  const ids=scopeIds();
+  const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  if(ts.length===0) return `<div class="empty"><div class="big">📅</div>مفيش مدرّسين لسه.</div>`;
+  return `<div class="grid3">${ts.map(t=>{
+    const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length, owner=U(t.owner_id);
+    const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
+    return `<div class="member">
+      <div class="top"><span class="ava" style="width:38px;height:38px;font-size:13px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+        <div><div class="name">${t.name}</div><div class="role">المسؤول: ${owner.name} · راحة: ${restName}</div></div></div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
+        <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div>
+      </div>
+      ${miniCalendar(t)}
+    </div>`;
+  }).join('')}</div>`;
+}
+function miniCalendar(t){
+  const rest=(t.rest_day==null?5:t.rest_day);
+  const done=publishedDays(t.id);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const ms=monthStart();
+  const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
+  let cells=dayLabels.map(l=>`<div class="d" style="background:none;color:var(--faint)">${l}</div>`).join('');
+  for(let i=0;i<ms.getDay();i++) cells+='<div class="d future"></div>';
+  let d=new Date(ms); const monthIdx=ms.getMonth();
+  while(d.getMonth()===monthIdx){
+    const ds=ymd(d); const num=d.getDate();
+    let cls;
+    if(d>=today) cls='future';
+    else if(d.getDay()===rest) cls='rest';
+    else if(done.has(ds)) cls='ok';
+    else cls='miss';
+    cells+=`<div class="d ${cls}">${num}</div>`;
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  return `<div class="cal">${cells}</div>`;
+}
+
 function reportsView(){
   const cs=visibleCards();const by=s=>cs.filter(c=>c.status===s).length;
   const total=cs.length,late=cs.filter(isLate).length,byCat=CATS.map(c=>[c,cs.filter(x=>x.category===c).length]).filter(x=>x[1]);
@@ -543,43 +771,106 @@ function copyReport(){const cs=visibleCards();const by=s=>cs.filter(c=>c.status=
   const txt=`📊 تقرير المحتوى — ${ME.name}\n\nالإجمالي: ${cs.length}\n✅ اتنشر: ${by('published')}\n🟢 جاهز: ${by('ready')}\n🟣 مراجعة: ${by('review')}\n⚠️ متأخر: ${cs.filter(isLate).length}\n\n${new Date().toLocaleDateString('ar-EG')}`;
   navigator.clipboard?.writeText(txt).then(()=>toast('التقرير اتنسخ'),()=>toast('مقدرش ينسخ',true));}
 
-/* ---------- promote (admin) ---------- */
-window.promote=async function(id){
-  const p=U(id);
-  const role=prompt(`دور ${p.name}؟ اكتب: admin أو lead أو member`,p.role);
-  if(!role||!['admin','lead','member'].includes(role))return;
-  let lead=p.lead_id;
-  if(role==='member'){
-    const leads=PROFILES.filter(x=>x.role==='lead');
-    const ln=prompt('تابع لأنهي تيم ليدر؟ اكتب اسمه:\n'+leads.map(l=>l.name).join(' / '), U(p.lead_id).name||'');
-    const f=leads.find(l=>l.name===ln); lead=f?f.id:null;
+/* ---------- management view (admin/manager/lead) ---------- */
+function manageView(){
+  // who can I manage: admin = everyone; others = my descendants
+  let people = ME.role==='admin' ? PROFILES.filter(p=>p.id!==ME.id) : PROFILES.filter(p=>descendantIds().includes(p.id));
+  people = people.slice().sort((a,b)=>roleRank(b.role)-roleRank(a.role));
+  const groups=[
+    ['managers','أكونت مانجرز','manager'],
+    ['leads','تيم ليدرز','lead'],
+    ['members','أعضاء','member'],
+  ];
+  const head=`<div class="page-head"><div><div class="page-title">إدارة الفريق</div>
+    <div class="page-sub">رقّي الناس وحدد كل واحد تابع لمين · إجمالي ${people.length} شخص</div></div></div>`;
+  if(people.length===0) return head+`<div class="empty"><div class="big">⚙</div>لسه محدش سجّل غيرك. ابعت لينك السايت لفريقك، وأول ما يعملوا حساب هيظهروا هنا تقدر ترقّيهم وتوزّعهم.</div>`;
+  const card=p=>{
+    const roleOpts=[['member','عضو'],['lead','تيم ليدر'],['manager','أكونت مانجر']]
+      .concat(ME.role==='admin'?[['admin','أدمن']]:[])
+      .map(([v,l])=>`<option value="${v}" ${p.role===v?'selected':''}>${l}</option>`).join('');
+    // parent options depend on the role: member→leads, lead→managers, manager→(admin, none)
+    let parentSel='';
+    if(p.role==='member'){
+      const leads=PROFILES.filter(x=>x.role==='lead');
+      parentSel=`<select onchange="setParent('${p.id}',this.value)"><option value="">— اختار التيم ليدر —</option>${leads.map(l=>`<option value="${l.id}" ${p.lead_id===l.id?'selected':''}>${l.name}</option>`).join('')}</select>`;
+    } else if(p.role==='lead'){
+      const mgrs=PROFILES.filter(x=>x.role==='manager');
+      parentSel=`<select onchange="setParent('${p.id}',this.value)"><option value="">— اختار الأكونت مانجر —</option>${mgrs.map(m=>`<option value="${m.id}" ${p.lead_id===m.id?'selected':''}>${m.name}</option>`).join('')}</select>`;
+    } else {
+      parentSel=`<span style="color:var(--faint);font-size:12px">تابع للأدمن مباشرة</span>`;
+    }
+    const parentLabel = p.role==='member'?'التيم ليدر':p.role==='lead'?'الأكونت مانجر':'';
+    return `<div class="member">
+      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(p.id)}">${initials(p.name)}</span>
+        <div><div class="name">${p.name}</div><div class="role">${roleLabel(p.role)}</div></div></div>
+      <div class="field" style="margin-bottom:12px"><label>الدور</label>
+        <select onchange="setRole('${p.id}',this.value)">${roleOpts}</select></div>
+      ${parentLabel?`<div class="field"><label>${parentLabel}</label>${parentSel}</div>`:`<div class="field"><label>التبعية</label>${parentSel}</div>`}
+    </div>`;
+  };
+  let body='';
+  groups.forEach(([k,title,r])=>{
+    const grp=people.filter(p=>p.role===r);
+    if(grp.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">${title} (${grp.length})</div><div class="grid3">${grp.map(card).join('')}</div>`;
+  });
+  // قسم توزيع المدرّسين
+  const allOwners = ME.role==='admin'?PROFILES:[ME,...PROFILES.filter(p=>descendantIds().includes(p.id))];
+  const teacherList = ME.role==='admin'?TEACHERS:TEACHERS.filter(t=>scopeIds().includes(t.owner_id));
+  if(teacherList.length){
+    body+=`<div class="nav-group-label" style="color:var(--muted);margin:24px 4px 10px;font-size:13px">توزيع المدرّسين (${teacherList.length})</div>
+    <div class="grid3">${teacherList.map(t=>`<div class="member">
+      <div class="top"><span class="ava" style="width:38px;height:38px;font-size:13px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+        <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'}</div></div></div>
+      <div class="field"><label>المسؤول عنه</label>
+        <select onchange="setTeacherOwner('${t.id}',this.value)">
+          ${allOwners.map(o=>`<option value="${o.id}" ${t.owner_id===o.id?'selected':''}>${o.name} · ${roleLabel(o.role)}</option>`).join('')}
+        </select></div>
+    </div>`).join('')}</div>`;
   }
-  const {error}=await sb.from('profiles').update({role,lead_id:role==='member'?lead:null}).eq('id',id);
+  return head+body;
+}
+window.setRole=async function(id,role){
+  // changing role may invalidate parent; reset parent if it no longer fits
+  const p=U(id); let lead=p.lead_id;
+  if(role==='manager'||role==='admin') lead=null;
+  const {error}=await sb.from('profiles').update({role,lead_id:lead}).eq('id',id);
   if(error)return toast(error.message,true);
-  await reload();render();toast('اتعدّل');
+  await reload();render();toast('اتغيّر الدور');
+};
+window.setParent=async function(id,parentId){
+  const {error}=await sb.from('profiles').update({lead_id:parentId||null}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتحدّدت التبعية');
+};
+window.setTeacherOwner=async function(tid,ownerId){
+  const {error}=await sb.from('teachers').update({owner_id:ownerId}).eq('id',tid);
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتنقل المدرّس');
 };
 
 /* ---------- add / edit teacher ---------- */
 window.openTeacher=function(tid){
   const t=tid?T(tid):null;
-  // owner options: admin sees everyone; lead sees self + own members
+  // أي حد (عضو/تيم ليدر/أكونت مانجر) يقدر يمسك مدرّس
   let owners;
   if(ME.role==='admin') owners=PROFILES;
-  else if(ME.role==='lead') owners=PROFILES.filter(p=>p.id===ME.id||p.lead_id===ME.id);
-  else owners=[ME];
+  else owners=[ME, ...PROFILES.filter(p=>descendantIds().includes(p.id))];
   document.getElementById('mTitle').textContent=t?'تعديل مدرّس':'إضافة مدرّس';
   document.getElementById('mBody').innerHTML=`
     <div class="field"><label>اسم المدرّس</label><input id="t_name" value="${t?escAttr(t.name):''}" placeholder="مثلاً: م. عمر الشربيني"></div>
     <div class="field"><label>المادة</label><input id="t_subject" value="${t?escAttr(t.subject||''):''}" placeholder="مثلاً: إحصاء"></div>
     <div class="field"><label>المسؤول عنه</label><select id="t_owner">
       ${owners.map(o=>`<option value="${o.id}" ${t&&t.owner_id===o.id?'selected':(!t&&o.id===ME.id?'selected':'')}>${o.name} · ${roleLabel(o.role)}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>يوم الراحة (مايتحاسبش عليه)</label><select id="t_rest">
+      ${['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'].map((d,i)=>`<option value="${i}" ${(t?(t.rest_day==null?5:t.rest_day):5)===i?'selected':''}>${d}</option>`).join('')}
     </select></div>`;
   let acts=`<button class="btn primary" id="t_save">${t?'حفظ':'إضافة المدرّس'}</button>`;
   if(t && ME.role==='admin') acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
   document.getElementById('mFoot').innerHTML=acts;
   document.getElementById('t_save').onclick=async()=>{
     const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
-    const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner')};
+    const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner'),rest_day:+val('t_rest')};
     let error;
     if(t)({error}=await sb.from('teachers').update(data).eq('id',t.id));
     else ({error}=await sb.from('teachers').insert(data));
@@ -615,7 +906,7 @@ function linkTreeView(){
   return `<div class="page-head"><div>
       <div class="page-title">${t.name}</div>
       <div class="page-sub">لينكات المدرّس · المسؤول: ${owner.name}</div></div>
-      ${editable?`<button class="btn primary" onclick="editLinks('${t.id}')">✎ تعديل اللينكات</button>`:''}</div>
+      ${editable?`<button class="btn" onclick="openTeacher('${t.id}')">⚙ تعديل المدرّس</button> <button class="btn primary" onclick="editLinks('${t.id}')">✎ تعديل اللينكات</button>`:''}</div>
     <div class="lt-wrap">${cards}</div>`;
 }
 window.editLinks=function(tid){
@@ -637,10 +928,10 @@ window.editLinks=function(tid){
 /* ---------- card modal ---------- */
 window.openCard=function(id){
   const c=id?CARDS.find(x=>x.id===id):null;
-  const ids=myMembers();
-  const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>u.role==='member'&&ids.includes(u.id));
-  if(assignable.length===0 && ME.role!=='member') assignable.push(ME);
-  const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
+  const ids=scopeIds();
+  const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin');
+  if(assignable.length===0) assignable.push(ME);
+  const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
   document.getElementById('mTitle').textContent=c?c.title:'فكرة جديدة';
   document.getElementById('mBody').innerHTML=`
@@ -669,9 +960,11 @@ window.openCard=function(id){
     const t=document.getElementById('f_title').value.trim();if(!t)return toast('اكتب عنوان',true);
     const data={title:t,teacher_id:val('f_teacher')||null,assignee_id:val('f_assignee'),category:val('f_cat'),platform:val('f_plat'),week:+val('f_week'),due:val('f_due')||null,status:cur};
     let error;
+    const wasPub = c && c.status==='published';
     if(c)({error}=await sb.from('cards').update(data).eq('id',c.id));
     else ({error}=await sb.from('cards').insert({...data,created_by:ME.id}));
     if(error)return toast(error.message,true);
+    if(cur==='published' && !wasPub){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:c?c.id:null}); }
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضافت');
   };
   if(c&&canApprove()&&c.status==='review'){
