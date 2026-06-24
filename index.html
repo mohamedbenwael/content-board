@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بورد المحتوى</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -259,10 +261,10 @@
 <div id="app" class="hidden">
   <div class="topbar">
     <div class="brand"><div class="logo"><img src="logo-white.png" alt="A to Z"></div><div><h1>بورد المحتوى</h1><div class="sub">A to Z — إدارة فريق المحتوى</div></div></div>
+    <button class="btn ghost" id="addTeacherBtn">＋ مدرّس</button>
     <div class="spacer"></div>
     <div class="search"><span style="color:var(--faint)">⌕</span><input id="search" placeholder="ابحث في المحتوى…"></div>
-    <button class="btn ghost" id="addTeacherBtn">＋ مدرّس</button>
-    <button class="btn primary" id="addBtn">＋ فكرة جديدة</button>
+    <button class="btn primary" id="addBtn">＋ بوست جديد</button>
   </div>
   <div class="shell">
     <aside class="side">
@@ -285,7 +287,7 @@
 </div>
 
 <div class="overlay" id="overlay"><div class="modal">
-  <div class="mh"><h3 id="mTitle">فكرة جديدة</h3><button class="x" id="mClose">×</button></div>
+  <div class="mh"><h3 id="mTitle">بوست جديد</h3><button class="x" id="mClose">×</button></div>
   <div class="mb" id="mBody"></div><div class="mf" id="mFoot"></div>
 </div></div>
 <div class="toast" id="toast"></div>
@@ -325,7 +327,7 @@ const LINKS=[
   {key:'link_youtube', name:'يوتيوب',       hint:'قناة المدرّس', ico:'▶', bg:'#FF0000'},
   {key:'link_facebook',name:'فيسبوك',       hint:'صفحة المدرّس', ico:'f', bg:'#1877F2'},
   {key:'link_tiktok',  name:'تيك توك',       hint:'حساب تيك توك',  ico:'♪', bg:'#111111'},
-  {key:'link_whatsapp',name:'جروب واتساب',   hint:'جروب الطلبة',  ico:'✆', bg:'#25D366'},
+  {key:'link_whatsapp',name:'جروب واتساب',   hint:'جروب المدرّس',  ico:'✆', bg:'#25D366'},
 ];
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
@@ -703,7 +705,8 @@ function memberCardHTML(mid){
     <div class="kpi"><div class="n" style="color:${late?'var(--danger)':'inherit'}">${late}</div><div class="l">متأخر</div></div></div>
     <div class="wl"><div class="lbl"><span>عبء الشغل</span><span class="mono">${active.length} مهمة</span></div><div class="track">${seg||'<i style="width:100%;background:var(--raised2)"></i>'}</div></div>
     <div class="wl" style="margin-top:12px"><div class="lbl"><span>التسليم في الميعاد</span><span class="mono">${onTimeRate}%</span></div>
-    <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div></div>`;
+    <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div>
+    <div class="teach-list" style="margin-top:10px"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">ماسك المدرّسين:</span>${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'}</div></div>`;
 }
 function leaderCardHTML(lid,role){
   const l=U(lid);
@@ -721,6 +724,7 @@ function leaderCardHTML(lid,role){
     <div class="kpi-row"><div class="kpi"><div class="n">${myTeachers}</div><div class="l">ماسك مدرّسين</div></div>
     <div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
     <div class="kpi"><div class="n">${pubCount}</div><div class="l">منشور</div></div></div>
+    ${TEACHERS.filter(t=>t.owner_id===lid).length?`<div class="teach-list"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">ماسك المدرّسين:</span>${TEACHERS.filter(t=>t.owner_id===lid).map(t=>`<span class="t">${t.name}</span>`).join('')}</div>`:''}
     <div class="teach-list" style="margin-top:8px"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">${subLabel}:</span>${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه مفيش ناس تحته</span>'}</div></div>`;
 }
 function teamGroupsHTML(){
@@ -1061,7 +1065,7 @@ window.openCard=function(id){
   if(assignable.length===0) assignable.push(ME);
   const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
-  document.getElementById('mTitle').textContent=c?c.title:'فكرة جديدة';
+  document.getElementById('mTitle').textContent=c?c.title:'بوست جديد';
   document.getElementById('mBody').innerHTML=`
     <div class="field"><label>عنوان الفكرة</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
     <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${c&&c.teacher_id===t.id?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
