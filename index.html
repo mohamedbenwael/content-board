@@ -473,11 +473,11 @@ const T=id=>TEACHERS.find(x=>x.id===id)||{name:'—',id};
 const ST=id=>STATUSES.find(s=>s.id===id);
 function avaColor(id){const i=PROFILES.findIndex(u=>u.id===id);return AVA[(i+AVA.length)%AVA.length];}
 function initials(n){return (n||'?').replace(/[()م.]/g,'').trim().split(' ')[0].slice(0,2);}
-function isLate(c){const done=(c.kind==='task')?(c.status==='done'):(c.status==='published');return !done&&c.due&&c.due<new Date().toISOString().slice(0,10);}
+function isLate(c){const done=(c.kind==='task')?(c.status==='done'):(c.status==='published');return !done&&c.due&&c.due<ymd(new Date());}
 
 /* ---------- متابعة النشر اليومي + التقييم ---------- */
 function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);}
-function ymd(d){return d.toISOString().slice(0,10);}
+function ymd(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);}
 // الأيام المطلوب فيها نشر للمدرّس — من تاريخ الإسناد أو أول الشهر (الأحدث) لحد إمبارح
 function expectedDays(teacher){
   const rest = (teacher.rest_day==null?5:teacher.rest_day);
@@ -555,7 +555,7 @@ async function recordPublish(card){
   if(card.id && PUBLOG.some(l=>l.card_id===card.id)) return;
   await sb.from('publish_log').insert({card_id:card.id||null, teacher_id:card.teacher_id, member_id:card.assignee_id||ME.id, pub_date:today});
 }
-function dueLabel(d){if(!d)return'—';const days=Math.round((new Date(d)-new Date(new Date().toISOString().slice(0,10)))/864e5);
+function dueLabel(d){if(!d)return'—';const days=Math.round((new Date(d+'T00:00:00')-new Date(ymd(new Date())+'T00:00:00'))/864e5);
   if(days===0)return'النهاردة';if(days<0)return'متأخر '+(-days)+'ي';if(days===1)return'بكرة';return'بعد '+days+'ي';}
 function roleLabel(r){return r==='admin'?'أدمن':r==='manager'?'أكونت مانجر':r==='lead'?'تيم ليدر':'عضو';}
 function roleRank(r){return r==='admin'?3:r==='manager'?2:r==='lead'?1:0;}
