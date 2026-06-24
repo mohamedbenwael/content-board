@@ -321,6 +321,8 @@ function withTimeout(p,ms,label){
 const STATUSES=[{id:'idea',name:'فكرة',color:'var(--idea)'},{id:'doing',name:'قيد العمل',color:'var(--doing)'},
   {id:'review',name:'محتاج مراجعة',color:'var(--review)'},{id:'ready',name:'جاهز للنشر',color:'var(--ready)'},
   {id:'published',name:'اتنشر',color:'var(--pub)'}];
+const TASK_STATUSES=[{id:'requested',name:'مطلوب',color:'var(--idea)'},{id:'tdoing',name:'بيتعمل',color:'var(--doing)'},
+  {id:'done',name:'خلص',color:'var(--ready)'}];
 const CATS=['ميمز','ريلز وتيك توك','كاروسيل','ديزاين وتفاعل','يوتيوب'];
 const PLATS=[{id:'fb',name:'فيسبوك'},{id:'yt',name:'يوتيوب'},{id:'tk',name:'تيك توك'},{id:'ig',name:'انستجرام'}];
 const LINKS=[
@@ -332,7 +334,7 @@ const LINKS=[
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[];
-let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null;
+let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post';
 
 /* ---------- Auth ---------- */
 async function init(){
@@ -439,7 +441,7 @@ const T=id=>TEACHERS.find(x=>x.id===id)||{name:'—',id};
 const ST=id=>STATUSES.find(s=>s.id===id);
 function avaColor(id){const i=PROFILES.findIndex(u=>u.id===id);return AVA[(i+AVA.length)%AVA.length];}
 function initials(n){return (n||'?').replace(/[()م.]/g,'').trim().split(' ')[0].slice(0,2);}
-function isLate(c){return c.status!=='published'&&c.due&&c.due<new Date().toISOString().slice(0,10);}
+function isLate(c){const done=(c.kind==='task')?(c.status==='done'):(c.status==='published');return !done&&c.due&&c.due<new Date().toISOString().slice(0,10);}
 
 /* ---------- متابعة النشر اليومي + التقييم ---------- */
 function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);}
@@ -492,7 +494,7 @@ function memberTeacherBreakdown(memberId){
 // نقطة تقييم العضو (الشهر) — ميعاد40 إنتاجية30 جودة20 خصم10
 function memberScore(memberId){
   const ms=ymd(monthStart());
-  const cards=CARDS.filter(c=>c.assignee_id===memberId);
+  const cards=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post');
   const published=cards.filter(c=>c.status==='published');
   const expectedTotal=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
   const posts=memberPosts(memberId);
@@ -584,32 +586,52 @@ function render(){
 }
 function renderTeacherNav(){ /* قايمة المدرّسين اتنقلت لخانة «المدرّسين» المستقلة */ }
 function statStrip(cs){
-  const total=cs.length,by=id=>cs.filter(c=>c.status===id).length,done=by('ready')+by('published');
+  const isTask=boardKind==='task';
+  const total=cs.length,by=id=>cs.filter(c=>c.status===id).length;
+  const done=isTask?by('done'):(by('ready')+by('published'));
   const pct=total?Math.round(done/total*100):0,late=cs.filter(isLate).length;
   const S=(k,v,c,e='')=>`<div class="stat"><div class="k"><span class="dot" style="background:${c}"></span>${k}</div><div class="v">${v}</div>${e}</div>`;
+  if(isTask) return `<div class="stats">${S('إجمالي التاسكات',total,'var(--brand)',`<div class="bar"><i style="width:${pct}%;background:var(--ready)"></i></div>`)}
+    ${S('مطلوب',by('requested'),'var(--idea)')}${S('بيتعمل',by('tdoing'),'var(--doing)')}
+    ${S('خلص',by('done'),'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
   return `<div class="stats">${S('إجمالي المحتوى',total,'var(--brand)',`<div class="bar"><i style="width:${pct}%;background:var(--ready)"></i></div>`)}
     ${S('قيد العمل',by('doing'),'var(--doing)')}${S('محتاج مراجعة',by('review'),'var(--review)')}
     ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
 }
 function boardView(){
-  const cs=visibleCards();const scopeName=scopeTeacher?T(scopeTeacher).name:'كل المدرّسين في نطاقك';
+  const all=visibleCards();
+  const isTask=boardKind==='task';
+  const cs=all.filter(c=>(c.kind||'post')===boardKind);
   const ids=scopeIds();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
   let hint='';
-  if(myTeachers.length===0){
+  if(!isTask && myTeachers.length===0){
     hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم الأدمن يضيفلك مدرّسين.'}</div>`;
   }
-  const cols=STATUSES.map(s=>{const items=cs.filter(c=>c.status===s.id);
+  const statuses=isTask?TASK_STATUSES:STATUSES;
+  const cols=statuses.map(s=>{const items=cs.filter(c=>c.status===s.id);
     return `<div class="col" data-status="${s.id}"><div class="col-head"><span class="dot" style="background:${s.color}"></span>${s.name}<span class="num">${items.length}</span></div>
       ${items.map(cardHTML).join('')||`<div style="color:var(--faint);font-size:12px;text-align:center;padding:14px 0">—</div>`}</div>`;}).join('');
   const chip=(l,v)=>`<button class="chip ${filterCat===v?'on':''}" data-cat="${v??''}">${l}</button>`;
-  return `<div class="page-head"><div><div class="page-title">البورد</div><div class="page-sub">${scopeName} — اسحب الكارت لتغيير حالته</div></div></div>
-    ${statStrip(cs)}${hint}<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>
+  const tabs=`<div class="seg-tabs" style="margin-bottom:16px">
+      <button class="${boardKind==='post'?'on':''}" onclick="boardKind='post';filterCat=null;render()">📱 البوستات</button>
+      <button class="${boardKind==='task'?'on':''}" onclick="boardKind='task';filterCat=null;render()">✅ التاسكات</button></div>`;
+  return `<div class="page-head"><div><div class="page-title">البورد</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}</div></div></div>
+    ${tabs}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>`;
 }
-function cardHTML(c){const t=T(c.teacher_id),a=U(c.assignee_id),late=isLate(c),nc=COMMENTS.filter(x=>x.card_id===c.id).length;
+function cardHTML(c){
+  const a=U(c.assignee_id),late=isLate(c),nc=COMMENTS.filter(x=>x.card_id===c.id).length;
+  if((c.kind||'post')==='task'){
+    const req=c.requested_by?U(c.requested_by):null;
+    return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill" style="background:var(--raised2);color:var(--muted)">✅ تاسك${req&&req.id!==c.assignee_id?' · من '+req.name:''}</div>
+      <div class="ttl">${esc(c.title)}</div>${c.caption?`<div class="meta"><span class="tag plat">${esc(c.caption.slice(0,40))}${c.caption.length>40?'…':''}</span></div>`:''}
+      <div class="foot"><span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><span class="who">${a.name}</span>
+      ${c.due?`<span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span>`:''}</div></div>`;
+  }
+  const t=T(c.teacher_id);
   return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill">● ${t.name}</div>
     <div class="ttl">${esc(c.title)}</div><div class="meta"><span class="tag cat">${c.category||'—'}</span>
-    <span class="tag plat">${PLATS.find(p=>p.id===c.platform)?.name||c.platform||'—'}</span>${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
+    <span class="tag plat">${PLATS.find(p=>p.id===c.platform)?.name||c.platform||'—'}</span>${c.post_link?`<span class="tag plat">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
     <div class="foot"><span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><span class="who">${a.name}</span>
     <span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span></div></div>`;}
 function wireBoard(){
@@ -623,6 +645,13 @@ function wireBoard(){
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
     col.addEventListener('drop',async e=>{e.preventDefault();col.classList.remove('drop');
       const id=e.dataTransfer.getData('id'),ns=col.dataset.status,c=CARDS.find(x=>x.id===id);if(!c)return;
+      const kind=c.kind||'post';
+      if(kind==='task'){
+        // العضو يحرّك لـ «بيتعمل» بس؛ «خلص» للقائد
+        if(ns==='done' && ME.role==='member' && c.assignee_id===ME.id){toast('التيم ليدر هو اللي يأكّد إنها خلصت',true);return;}
+        if(c.status!==ns){c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);}
+        return;
+      }
       if(ME.role==='member'&&(ns==='ready'||ns==='published')&&c.status!=='ready'){toast('الأعضاء بيحوّلوا لـ «محتاج مراجعة» والتيم ليدر يوافق',true);return;}
       if(c.status!==ns){const wasPub=c.status==='published';c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);if(ns==='published'&&!wasPub){await recordPublish(c);await reload();render();}}
     });
@@ -697,7 +726,7 @@ function teamView(){
 }
 let qTeam='';
 function memberCardHTML(mid){
-  const m=U(mid),cs=CARDS.filter(c=>c.assignee_id===mid),active=cs.filter(c=>c.status!=='published');
+  const m=U(mid),cs=CARDS.filter(c=>c.assignee_id===mid&&(c.kind||'post')==='post'),active=cs.filter(c=>c.status!=='published');
   const delivered=cs.filter(c=>c.status==='ready'||c.status==='published').length,late=cs.filter(isLate).length;
   const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
   const ts=TEACHERS.filter(t=>t.owner_id===mid);
@@ -1090,54 +1119,99 @@ window.editLinks=function(tid){
 };
 
 /* ---------- card modal ---------- */
-window.openCard=function(id){
+window.openCard=function(id,newKind){
   const c=id?CARDS.find(x=>x.id===id):null;
+  const kind = c ? (c.kind||'post') : (newKind||boardKind||'post');
+  const isTask = kind==='task';
   const ids=scopeIds();
   const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin');
   if(assignable.length===0) assignable.push(ME);
   const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
-  document.getElementById('mTitle').textContent=c?c.title:'بوست جديد';
-  document.getElementById('mBody').innerHTML=`
-    <div class="field"><label>عنوان الفكرة</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
-    <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${c&&c.teacher_id===t.id?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
-    <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
-    <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat">${CATS.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
-    <div class="field"><label>المنصة</label><select id="f_plat">${PLATS.map(p=>`<option value="${p.id}" ${c&&c.platform===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div></div>
-    <div class="two"><div class="field"><label>الأسبوع</label><select id="f_week">${[1,2,3,4].map(w=>`<option value="${w}" ${c&&c.week===w?'selected':''}>الأسبوع ${w}</option>`).join('')}</select></div>
-    <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div></div>
-    <div class="field"><label>الحالة</label><div class="seg" id="f_status">${STATUSES.map(s=>`<button data-st="${s.id}" class="${(c?c.status:'idea')===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
-    ${c?`<div class="field"><label>التعليقات والمراجعة</label><div class="comments" id="f_comments">${cmts.length?cmts.map(cm=>`<div class="cmt"><div class="h"><b>${U(cm.author_id).name}</b><span>${new Date(cm.created_at).toLocaleDateString('ar-EG')}</span></div>${esc(cm.text)}</div>`).join(''):'<div style="color:var(--faint);font-size:12px">مفيش تعليقات</div>'}</div>
-    <div style="display:flex;gap:8px;margin-top:10px"><input id="f_newcmt" placeholder="اكتب ملاحظة…" style="flex:1;background:var(--raised);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:10px 12px"><button class="btn" id="f_addcmt">إضافة</button></div></div>`:''}`;
-  let cur=c?c.status:'idea';
-  document.querySelectorAll('#f_status button').forEach(b=>b.onclick=()=>{if(ME.role==='member'&&(b.dataset.st==='ready'||b.dataset.st==='published')){toast('الأعضاء بيوصلوا لحد «محتاج مراجعة»',true);return;}cur=b.dataset.st;document.querySelectorAll('#f_status button').forEach(x=>x.classList.toggle('on',x===b));});
+  // تاسك مطلوبة من قائد لعضو → العضو ميعدّلش فيها
+  const taskLocked = isTask && c && c.requested_by && c.assignee_id===ME.id && c.requested_by!==ME.id && ME.role==='member';
+  document.getElementById('mTitle').textContent = c ? c.title : (isTask?'تاسك جديدة':'بوست جديد');
+  const statuses = isTask?TASK_STATUSES:STATUSES;
+  const startStatus = c?c.status:(isTask?'requested':'idea');
+
+  // مبدّل النوع (للجديد فقط)
+  const kindToggle = c ? '' : `<div class="field"><label>النوع</label><div class="seg" id="f_kind">
+      <button data-k="post" class="${kind==='post'?'on':''}">📱 بوست (بيتحاسب)</button>
+      <button data-k="task" class="${kind==='task'?'on':''}">✅ تاسك (مش بيتحاسب)</button></div></div>`;
+
+  let fields;
+  if(isTask){
+    fields=`
+      <div class="field"><label>عنوان التاسك</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: اعمل ديزاين بوست العرض" ${taskLocked?'disabled':''}></div>
+      <div class="two"><div class="field"><label>المسؤول</label><select id="f_assignee" ${taskLocked?'disabled':''}>${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===ME.id?'selected':'')}>${u.name}</option>`).join('')}</select></div>
+      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}" ${taskLocked?'disabled':''}></div></div>
+      <div class="field"><label>تفاصيل (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="تفاصيل المطلوب…" ${taskLocked?'disabled':''}></div>
+      <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
+      ${taskLocked?'<div class="lt-empty" style="margin-top:4px">دي تاسك مطلوبة منك — تقدر تحرّكها لـ «بيتعمل» من البورد، والتيم ليدر يأكّد إنها خلصت.</div>':''}`;
+  } else {
+    fields=`
+      <div class="field"><label>عنوان البوست</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
+      <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${c&&c.teacher_id===t.id?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
+      <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
+      <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat">${CATS.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>المنصة</label><select id="f_plat">${PLATS.map(p=>`<option value="${p.id}" ${c&&c.platform===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div></div>
+      <div class="two"><div class="field"><label>الأسبوع</label><select id="f_week">${[1,2,3,4].map(w=>`<option value="${w}" ${c&&c.week===w?'selected':''}>الأسبوع ${w}</option>`).join('')}</select></div>
+      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div></div>
+      <div class="field"><label>لينك البوست (اختياري)</label><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
+      <div class="field"><label>الكابشن (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="نص البوست…"></div>
+      <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>`;
+  }
+
+  document.getElementById('mBody').innerHTML = kindToggle + fields +
+    (c?`<div class="field"><label>التعليقات والمراجعة</label><div class="comments" id="f_comments">${cmts.length?cmts.map(cm=>`<div class="cmt"><div class="h"><b>${U(cm.author_id).name}</b><span>${new Date(cm.created_at).toLocaleDateString('ar-EG')}</span></div>${esc(cm.text)}</div>`).join(''):'<div style="color:var(--faint);font-size:12px">مفيش تعليقات</div>'}</div>
+    <div style="display:flex;gap:8px;margin-top:10px"><input id="f_newcmt" placeholder="اكتب ملاحظة…" style="flex:1;background:var(--raised);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:10px 12px"><button class="btn" id="f_addcmt">إضافة</button></div></div>`:'');
+
+  // مبدّل النوع للجديد: يعيد فتح المودال بالنوع المختار
+  if(!c){document.querySelectorAll('#f_kind button').forEach(b=>b.onclick=()=>openCard(null,b.dataset.k));}
+
+  let cur=startStatus;
+  if(!taskLocked) document.querySelectorAll('#f_status button').forEach(b=>b.onclick=()=>{
+    if(!isTask && ME.role==='member'&&(b.dataset.st==='ready'||b.dataset.st==='published')){toast('الأعضاء بيوصلوا لحد «محتاج مراجعة»',true);return;}
+    if(isTask && b.dataset.st==='done' && ME.role==='member' && c && c.requested_by && c.requested_by!==ME.id){toast('التيم ليدر هو اللي يأكّد إنها خلصت',true);return;}
+    cur=b.dataset.st;document.querySelectorAll('#f_status button').forEach(x=>x.classList.toggle('on',x===b));});
+
   const foot=document.getElementById('mFoot');
-  let acts=`<button class="btn primary" id="f_save">${c?'حفظ':'إضافة الفكرة'}</button>`;
-  if(c&&canApprove()&&c.status==='review')acts+=`<button class="btn" id="f_approve" style="border-color:var(--ready);color:var(--ready)">✓ موافقة</button><button class="btn" id="f_return" style="border-color:var(--danger);color:var(--danger)">↩ رجوع</button>`;
-  if(c)acts+=`<button class="danger-link" id="f_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
+  let acts = taskLocked ? '' : `<button class="btn primary" id="f_save">${c?'حفظ':'إضافة'}</button>`;
+  if(!isTask && c&&canApprove()&&c.status==='review')acts+=`<button class="btn" id="f_approve" style="border-color:var(--ready);color:var(--ready)">✓ موافقة</button><button class="btn" id="f_return" style="border-color:var(--danger);color:var(--danger)">↩ رجوع</button>`;
+  if(c && !taskLocked)acts+=`<button class="danger-link" id="f_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
   foot.innerHTML=acts;
+
   if(c){document.getElementById('f_addcmt').onclick=addCmt;document.getElementById('f_newcmt').addEventListener('keydown',e=>{if(e.key==='Enter')addCmt();});}
   async function addCmt(){const v=document.getElementById('f_newcmt').value.trim();if(!v)return;
     const {error}=await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:v});if(error)return toast(error.message,true);
     await reload();openCard(id);}
-  document.getElementById('f_save').onclick=async()=>{
+
+  if(!taskLocked) document.getElementById('f_save').onclick=async()=>{
     const t=document.getElementById('f_title').value.trim();if(!t)return toast('اكتب عنوان',true);
-    const data={title:t,teacher_id:val('f_teacher')||null,assignee_id:val('f_assignee'),category:val('f_cat'),platform:val('f_plat'),week:+val('f_week'),due:val('f_due')||null,status:cur};
+    let data;
+    if(isTask){
+      const aid=val('f_assignee');
+      data={title:t,kind:'task',assignee_id:aid,due:val('f_due')||null,caption:val('f_caption')||null,status:cur,teacher_id:null};
+      // لو الكارت جديد واتسند لحد غيري → أنا اللي طلبته
+      if(!c) data.requested_by = (aid!==ME.id)?ME.id:null;
+    } else {
+      data={title:t,kind:'post',teacher_id:val('f_teacher')||null,assignee_id:val('f_assignee'),category:val('f_cat'),platform:val('f_plat'),week:+val('f_week'),due:val('f_due')||null,post_link:normUrl(val('f_link'))||null,caption:val('f_caption')||null,status:cur};
+    }
     let error;
     const wasPub = c && c.status==='published';
     if(c)({error}=await sb.from('cards').update(data).eq('id',c.id));
     else ({error}=await sb.from('cards').insert({...data,created_by:ME.id}));
     if(error)return toast(error.message,true);
-    if(cur==='published' && !wasPub){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:c?c.id:null}); }
-    await reload();closeModal();render();toast(c?'اتحفظ':'اتضافت');
+    if(!isTask && cur==='published' && !wasPub){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:c?c.id:null}); }
+    await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
   };
-  if(c&&canApprove()&&c.status==='review'){
+  if(!isTask && c&&canApprove()&&c.status==='review'){
     document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready'}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
     document.getElementById('f_return').onclick=async()=>{const note=prompt('سبب الرجوع:');if(note===null)return;
       if(note.trim())await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:'↩ '+note.trim()});
       await sb.from('cards').update({status:'doing'}).eq('id',c.id);await reload();closeModal();render();toast('رجع بملاحظة');};
   }
-  if(c)document.getElementById('f_del').onclick=async()=>{if(confirm('متأكد تمسح؟')){await sb.from('cards').delete().eq('id',c.id);await reload();closeModal();render();toast('اتمسحت');}};
+  if(c && !taskLocked)document.getElementById('f_del').onclick=async()=>{if(confirm('متأكد تمسح؟')){await sb.from('cards').delete().eq('id',c.id);await reload();closeModal();render();toast('اتمسحت');}};
   document.getElementById('overlay').classList.add('show');
 };
 const val=id=>document.getElementById(id).value;
@@ -1149,7 +1223,7 @@ let toastT;function toast(m,bad){const t=document.getElementById('toast');t.text
 /* ---------- wiring ---------- */
 function wireApp(){
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
-  document.getElementById('addBtn').onclick=()=>openCard(null);
+  document.getElementById('addBtn').onclick=()=>openCard(null,boardKind);
   document.getElementById('addTeacherBtn').onclick=()=>openTeacher(null);
   document.getElementById('mClose').onclick=closeModal;
   document.getElementById('overlay').onclick=e=>{if(e.target.id==='overlay')closeModal();};
