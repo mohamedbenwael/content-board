@@ -232,8 +232,37 @@
   .spin{width:34px;height:34px;border:3px solid var(--line2);border-top-color:var(--brand);border-radius:50%;animation:sp 1s linear infinite;margin:0 auto 14px}
   @keyframes sp{to{transform:rotate(360deg)}}
 
+  .menu-btn{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:42px;height:42px;border-radius:10px;font-size:20px;flex:none;cursor:pointer}
+  .ico-m{display:none}
+  .scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:45}
+  .scrim.show{display:block}
   @media(max-width:1080px){.stats{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr 1fr}}
-  @media(max-width:720px){.side{display:none}.board{grid-template-columns:1fr}.two{grid-template-columns:1fr}.search{min-width:0;flex:1}}
+  @media(max-width:720px){
+    .board{grid-template-columns:1fr}.two{grid-template-columns:1fr}
+    .menu-btn{display:flex;align-items:center;justify-content:center}
+    .topbar{padding:10px 14px;gap:10px}
+    .topbar-search{display:none}
+    .brand .sub{display:none}
+    .brand h1{font-size:16px}
+    .brand .logo,.brand .logo img{height:32px}
+    .btn .lbl{display:none}
+    .btn .ico-m{display:inline}
+    .topbar .btn{padding:0 12px;height:42px}
+    /* الدرج الجانبي */
+    .side{position:fixed;top:0;right:0;height:100vh;width:270px;max-width:84vw;z-index:50;
+      transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.3)}
+    .side.open{transform:translateX(0)}
+    .main{padding:16px 14px}
+    .page-title{font-size:20px}
+    .grid3{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr);gap:9px}
+    .stat .v{font-size:24px}
+    .cal{max-width:100%}
+    .rank-row{padding:12px 14px;gap:10px}
+    .seg-tabs{width:100%;overflow-x:auto}
+    .modal{width:96vw}
+  }
+  @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}.topbar .btn.ghost{display:none}}
 </style>
 </head>
 <body>
@@ -260,14 +289,16 @@
 <!-- APP -->
 <div id="app" class="hidden">
   <div class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="القائمة">☰</button>
     <div class="brand"><div class="logo"><img src="logo-white.png" alt="A to Z"></div><div><h1>بورد المحتوى</h1><div class="sub">A to Z — إدارة فريق المحتوى</div></div></div>
-    <button class="btn ghost" id="addTeacherBtn">＋ مدرّس</button>
+    <button class="btn ghost" id="addTeacherBtn"><span class="lbl">＋ مدرّس</span><span class="ico-m">🎓</span></button>
     <div class="spacer"></div>
-    <div class="search"><span style="color:var(--faint)">⌕</span><input id="search" placeholder="ابحث في المحتوى…"></div>
-    <button class="btn primary" id="addBtn">＋ بوست جديد</button>
+    <div class="search topbar-search"><span style="color:var(--faint)">⌕</span><input id="search" placeholder="ابحث في المحتوى…"></div>
+    <button class="btn primary" id="addBtn"><span class="lbl">＋ بوست جديد</span><span class="ico-m">＋</span></button>
   </div>
+  <div class="scrim" id="scrim"></div>
   <div class="shell">
-    <aside class="side">
+    <aside class="side" id="side">
       <div class="nav-group-label">المساحة</div>
       <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
       <button class="nav-item" data-view="agenda"><span class="ico">📅</span> الأجندة</button>
@@ -827,7 +858,8 @@ function descendantsOf(rootId){
 /* ---------- صفحة المدرّسين (مستقلة + بحث) ---------- */
 let qTeachers='';
 function teachersPage(){
-  return `<div class="page-head"><div><div class="page-title">المدرّسين</div><div class="page-sub">كل مدرّس · مين ماسكه، تيم مين، بوستات وأيام فايتة الشهر</div></div></div>
+  const addBtn = ME.role!=='member' ? `<button class="btn primary" onclick="openTeacher(null)">＋ مدرّس</button>` : '';
+  return `<div class="page-head"><div><div class="page-title">المدرّسين</div><div class="page-sub">كل مدرّس · مين ماسكه، تيم مين، بوستات وأيام فايتة الشهر</div></div>${addBtn}</div>
     <div class="search" style="max-width:340px;margin-bottom:18px;border-color:var(--line2)"><span style="color:var(--faint)">⌕</span>
       <input id="teacherSearch" placeholder="ابحث باسم المدرّس أو المسؤول…" value="${escAttr(qTeachers)}" oninput="qTeachers=this.value;document.getElementById('teacherListBox').innerHTML=teacherCards()"></div>
     <div id="teacherListBox">${teacherCards()}</div>`;
@@ -1286,7 +1318,12 @@ let toastT;function toast(m,bad){const t=document.getElementById('toast');t.text
 
 /* ---------- wiring ---------- */
 function wireApp(){
-  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
+  const side=document.getElementById('side'), scrim=document.getElementById('scrim');
+  const openDrawer=()=>{side.classList.add('open');scrim.classList.add('show');};
+  const closeDrawer=()=>{side.classList.remove('open');scrim.classList.remove('show');};
+  document.getElementById('menuBtn').onclick=openDrawer;
+  scrim.onclick=closeDrawer;
+  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;closeDrawer();render();});
   document.getElementById('addBtn').onclick=()=>openCard(null,boardKind);
   document.getElementById('addTeacherBtn').onclick=()=>openTeacher(null);
   document.getElementById('mClose').onclick=closeModal;
