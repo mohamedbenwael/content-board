@@ -444,12 +444,18 @@ function isLate(c){return c.status!=='published'&&c.due&&c.due<new Date().toISOS
 /* ---------- متابعة النشر اليومي + التقييم ---------- */
 function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);}
 function ymd(d){return d.toISOString().slice(0,10);}
-// الأيام المطلوب فيها نشر للمدرّس من أول الشهر لإمبارح (بنستثني يوم الراحة واليوم الحالي)
+// الأيام المطلوب فيها نشر للمدرّس — من تاريخ الإسناد أو أول الشهر (الأحدث) لحد إمبارح
 function expectedDays(teacher){
   const rest = (teacher.rest_day==null?5:teacher.rest_day);
   const days=[]; const today=new Date(); today.setHours(0,0,0,0);
-  let d=new Date(monthStart());
-  while(d < today){ // لحد إمبارح (اليوم الحالي لسه بيتنشر فيه)
+  // نبدأ من الأحدث بين: أول الشهر، وتاريخ إسناد المدرّس للموظف
+  let start=new Date(monthStart());
+  if(teacher.assigned_at){
+    const a=new Date(teacher.assigned_at+'T00:00:00');
+    if(a>start) start=a;
+  }
+  let d=new Date(start);
+  while(d < today){
     if(d.getDay()!==rest) days.push(ymd(d));
     d=new Date(d); d.setDate(d.getDate()+1);
   }
@@ -562,7 +568,7 @@ function render(){
   document.getElementById('meRole').textContent=roleLabel(ME.role)+(ME.role==='lead'?' · '+PROFILES.filter(p=>p.lead_id===ME.id).length+' أعضاء':'');
   const ma=document.getElementById('meAva');ma.textContent=initials(ME.name);ma.style.background=avaColor(ME.id);
   document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
-  document.getElementById('navManage').style.display = ME.role==='admin'?'flex':'none';
+  document.getElementById('navManage').style.display = (ME.role==='admin'||ME.role==='manager')?'flex':'none';
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
@@ -846,22 +852,32 @@ function miniCalendar(t){
   const done=publishedDays(t.id);
   const today=new Date(); today.setHours(0,0,0,0);
   const ms=monthStart();
+  const canBackdate = ME.role!=='member'; // التيم ليدر/الأكونت مانجر/الأدمن يقدروا يسجّلوا نشر فايت
+  const assigned = t.assigned_at ? new Date(t.assigned_at+'T00:00:00') : null;
   const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
   let cells=dayLabels.map(l=>`<div class="d" style="background:none;color:var(--faint)">${l}</div>`).join('');
   for(let i=0;i<ms.getDay();i++) cells+='<div class="d future"></div>';
   let d=new Date(ms); const monthIdx=ms.getMonth();
   while(d.getMonth()===monthIdx){
     const ds=ymd(d); const num=d.getDate();
-    let cls;
+    let cls, click='';
     if(d>=today) cls='future';
+    else if(assigned && d<assigned) cls='future'; // قبل ما المدرّس يتسند — مش محسوب
     else if(d.getDay()===rest) cls='rest';
     else if(done.has(ds)) cls='ok';
-    else cls='miss';
-    cells+=`<div class="d ${cls}">${num}</div>`;
+    else { cls='miss'; if(canBackdate){ click=`onclick="recordBackdate('${t.id}','${ds}')" style="cursor:pointer" title="سجّل نشر في اليوم ده"`; } }
+    cells+=`<div class="d ${cls}" ${click}>${num}</div>`;
     d=new Date(d); d.setDate(d.getDate()+1);
   }
-  return `<div class="cal">${cells}</div>`;
+  return `<div class="cal">${cells}</div>${canBackdate?'<div style="font-size:10.5px;color:var(--faint);margin-top:6px">دوس على يوم أحمر تسجّل فيه نشر فايت</div>':''}`;
 }
+window.recordBackdate=async function(tid,date){
+  const t=T(tid);
+  if(!confirm(`تسجّل إن «${t.name}» نزل بوست يوم ${date}؟`))return;
+  const {error}=await sb.from('publish_log').insert({card_id:null,teacher_id:tid,member_id:t.owner_id,pub_date:date});
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتسجّل النشر');
+};
 
 function reportsView(){
   const cs=visibleCards();const by=s=>cs.filter(c=>c.status===s).length;
@@ -910,8 +926,10 @@ function manageView(){
     }
     const parentLabel = p.role==='member'?'التيم ليدر':p.role==='lead'?'الأكونت مانجر':'';
     const suspended = p.active===false;
-    const actions = ME.role==='admin' ? `<div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn ghost" style="flex:1;height:34px;font-size:12.5px" onclick="toggleActive('${p.id}')">${suspended?'▶ إعادة تفعيل':'⏸ إيقاف'}</button>
+    const canManage = ME.role==='admin' || (ME.role==='manager' && descendantIds().includes(p.id));
+    const actions = canManage ? `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn ghost" style="flex:1;height:34px;font-size:12.5px" onclick="renameMember('${p.id}')">✎ تعديل الاسم</button>
+        <button class="btn ghost" style="flex:1;height:34px;font-size:12.5px" onclick="toggleActive('${p.id}')">${suspended?'▶ تفعيل':'⏸ إيقاف'}</button>
         <button class="btn ghost" style="height:34px;font-size:12.5px;border-color:var(--danger);color:var(--danger)" onclick="deleteMember('${p.id}')">🗑 مسح</button>
       </div>` : '';
     return `<div class="member" style="${suspended?'opacity:.55':''}">
@@ -958,7 +976,7 @@ window.setParent=async function(id,parentId){
   await reload();render();toast('اتحدّدت التبعية');
 };
 window.setTeacherOwner=async function(tid,ownerId){
-  const {error}=await sb.from('teachers').update({owner_id:ownerId}).eq('id',tid);
+  const {error}=await sb.from('teachers').update({owner_id:ownerId, assigned_at:ymd(new Date())}).eq('id',tid);
   if(error)return toast(error.message,true);
   await reload();render();toast('اتنقل المدرّس');
 };
@@ -979,6 +997,14 @@ window.deleteMember=async function(id){
   if(error)return toast(error.message,true);
   await reload();render();toast('اتمسح');
 };
+window.renameMember=async function(id){
+  const p=U(id);
+  const name=prompt('الاسم الجديد:',p.name);
+  if(!name||!name.trim()||name.trim()===p.name)return;
+  const {error}=await sb.from('profiles').update({name:name.trim()}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتعدّل الاسم');
+};
 
 /* ---------- add / edit teacher ---------- */
 window.openTeacher=function(tid){
@@ -998,18 +1024,24 @@ window.openTeacher=function(tid){
       ${['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'].map((d,i)=>`<option value="${i}" ${(t?(t.rest_day==null?5:t.rest_day):5)===i?'selected':''}>${d}</option>`).join('')}
     </select></div>`;
   let acts=`<button class="btn primary" id="t_save">${t?'حفظ':'إضافة المدرّس'}</button>`;
-  if(t && ME.role==='admin') acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
+  if(t && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id))) acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
   document.getElementById('mFoot').innerHTML=acts;
   document.getElementById('t_save').onclick=async()=>{
     const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
     const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner'),rest_day:+val('t_rest')};
     let error;
-    if(t)({error}=await sb.from('teachers').update(data).eq('id',t.id));
-    else ({error}=await sb.from('teachers').insert(data));
+    if(t){
+      if(t.owner_id!==data.owner_id) data.assigned_at=ymd(new Date()); // اتنقل لموظف تاني → نبدأ المتابعة من النهارده
+      ({error}=await sb.from('teachers').update(data).eq('id',t.id));
+    } else {
+      data.assigned_at=ymd(new Date());
+      ({error}=await sb.from('teachers').insert(data));
+    }
     if(error)return toast(error.message,true);
     await reload();closeModal();render();toast(t?'اتحفظ':'اتضاف المدرّس');
   };
-  if(t && ME.role==='admin') document.getElementById('t_del').onclick=async()=>{
+  const canDelTeacher = t && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id));
+  if(canDelTeacher) document.getElementById('t_del').onclick=async()=>{
     if(confirm('متأكد تمسح المدرّس ده؟ هيتمسح من كل الأماكن.')){await sb.from('teachers').delete().eq('id',t.id);await reload();closeModal();if(view==='linktree')view='board';render();toast('اتمسح');}
   };
   document.getElementById('overlay').classList.add('show');
