@@ -270,6 +270,7 @@
     <aside class="side">
       <div class="nav-group-label">المساحة</div>
       <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
+      <button class="nav-item" data-view="agenda"><span class="ico">📅</span> الأجندة</button>
       <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
       <button class="nav-item" data-view="teachers"><span class="ico">🎓</span> المدرّسين</button>
       <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
@@ -574,6 +575,7 @@ function render(){
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
+  else if(view==='agenda')main.innerHTML=agendaView();
   else if(view==='team')main.innerHTML=teamView();
   else if(view==='teachers')main.innerHTML=teachersPage();
   else if(view==='detail')main.innerHTML=detailView();
@@ -615,8 +617,9 @@ function boardView(){
   const tabs=`<div class="seg-tabs" style="margin-bottom:16px">
       <button class="${boardKind==='post'?'on':''}" onclick="boardKind='post';filterCat=null;render()">📱 البوستات</button>
       <button class="${boardKind==='task'?'on':''}" onclick="boardKind='task';filterCat=null;render()">✅ التاسكات</button></div>`;
-  return `<div class="page-head"><div><div class="page-title">البورد</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}</div></div></div>
-    ${tabs}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
+  const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
+  return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}</div></div></div>
+    ${tabs}${planBanner}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>`;
 }
 function cardHTML(c){
@@ -659,6 +662,46 @@ function wireBoard(){
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
 }
 window.openPersonDetail=function(id){detailId=id;view='detail';render();};
+let agendaScope='me';
+function agendaView(){
+  const canTeam = ME.role!=='member';
+  const ids = (agendaScope==='team'&&canTeam) ? scopeIds() : [ME.id];
+  // المهام النشطة (مش الخلصانة) المسندة للأشخاص دول
+  let items=CARDS.filter(c=>ids.includes(c.assignee_id));
+  items=items.filter(c=>(c.kind==='task')?c.status!=='done':c.status!=='published');
+  const today=new Date(); today.setHours(0,0,0,0);
+  const tomorrow=new Date(today); tomorrow.setDate(today.getDate()+1);
+  const weekEnd=new Date(today); weekEnd.setDate(today.getDate()+7);
+  const ymdT=ymd(today), ymdTom=ymd(tomorrow);
+  const buckets={late:[],today:[],tom:[],week:[],later:[],none:[]};
+  items.forEach(c=>{
+    if(!c.due){buckets.none.push(c);return;}
+    if(c.due<ymdT)buckets.late.push(c);
+    else if(c.due===ymdT)buckets.today.push(c);
+    else if(c.due===ymdTom)buckets.tom.push(c);
+    else if(c.due<=ymd(weekEnd))buckets.week.push(c);
+    else buckets.later.push(c);
+  });
+  const sortf=(a,b)=>(a.due||'9').localeCompare(b.due||'9');
+  Object.values(buckets).forEach(arr=>arr.sort(sortf));
+  const row=c=>{
+    const a=U(c.assignee_id), isTask=c.kind==='task', t=isTask?null:T(c.teacher_id);
+    const stName=(isTask?TASK_STATUSES:STATUSES).find(s=>s.id===c.status)?.name||'';
+    return `<div class="rank-row" style="cursor:pointer;padding:11px 16px" onclick="openCard('${c.id}')">
+      <span style="font-size:18px;flex:none">${isTask?'✅':'📱'}</span>
+      <div class="rank-main"><div class="nm" style="font-size:14px">${esc(c.title)}</div>
+        <div class="sub">${t?`<span>● ${t.name}</span>`:''}<span>👤 ${a.name}</span><span>${stName}</span></div></div>
+      ${c.due?`<span class="due ${isLate(c)?'late':''}" style="flex:none">${isLate(c)?'⚠':'◔'} ${dueLabel(c.due)}</span>`:'<span style="color:var(--faint);font-size:11px">بدون ميعاد</span>'}</div>`;
+  };
+  const section=(title,arr,color,urgent)=>arr.length?`<div class="nav-group-label" style="color:${color||'var(--muted)'};margin:18px 4px 10px;font-size:13px;font-weight:800">${title} (${arr.length})</div>${arr.map(row).join('')}`:'';
+  const toggle = canTeam?`<div class="seg-tabs" style="margin-bottom:18px">
+      <button class="${agendaScope==='me'?'on':''}" onclick="agendaScope='me';render()">شغلي أنا</button>
+      <button class="${agendaScope==='team'?'on':''}" onclick="agendaScope='team';render()">شغل الفريق</button></div>`:'';
+  let body=section('⚠ متأخر',buckets.late,'var(--danger)')+section('النهارده',buckets.today,'var(--brand)')
+    +section('بكرة',buckets.tom)+section('الأسبوع ده',buckets.week)+section('لاحقًا',buckets.later)+section('من غير ميعاد',buckets.none);
+  if(!body) body=`<div class="empty"><div class="big">📅</div>مفيش شغل مفتوح${agendaScope==='team'?' للفريق':''} حاليًا. كله متسلّم 👏</div>`;
+  return `<div class="page-head"><div><div class="page-title">الأجندة</div><div class="page-sub">شغلك مرتّب بالأيام — النهارده، بكرة، وبعدين</div></div></div>${toggle}${body}`;
+}
 function teacherStatChip(t){
   const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
   return `<div class="rank-row" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
@@ -789,26 +832,47 @@ function teachersPage(){
       <input id="teacherSearch" placeholder="ابحث باسم المدرّس أو المسؤول…" value="${escAttr(qTeachers)}" oninput="qTeachers=this.value;document.getElementById('teacherListBox').innerHTML=teacherCards()"></div>
     <div id="teacherListBox">${teacherCards()}</div>`;
 }
+function teacherCardHTML(t){
+  const owner=U(t.owner_id), lead=U(owner.lead_id);
+  const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
+  const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
+  return `<div class="member" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
+    <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+      <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'} · راحة ${restName}</div></div>
+      <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
+    <div class="kpi-row"><div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
+      <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div></div>
+    <div class="teach-list" style="margin-top:4px">
+      <span class="t">👤 ${owner.name} (${roleLabel(owner.role)})</span>
+      ${owner.lead_id?`<span class="t">⚑ تيم ${lead.name}</span>`:''}
+      <span class="t" style="background:var(--brand);color:#fff" onclick="event.stopPropagation();linkTeacher='${t.id}';view='linktree';render()">🔗 اللينكات</span>
+    </div></div>`;
+}
 function teacherCards(){
   const ids=scopeIds();
   let ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   if(qTeachers.trim()){const q=qTeachers.trim();ts=ts.filter(t=>(t.name+' '+U(t.owner_id).name).includes(q));}
   if(!ts.length) return `<div class="empty"><div class="big">🎓</div>مفيش مدرّسين${qTeachers?' بالبحث ده':''}.</div>`;
-  return `<div class="grid3">${ts.map(t=>{
-    const owner=U(t.owner_id), lead=U(owner.lead_id);
-    const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
-    const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
-    return `<div class="member" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
-      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(t.id)}">${initials(t.name)}</span>
-        <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'} · راحة ${restName}</div></div>
-        <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
-      <div class="kpi-row"><div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
-        <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div></div>
-      <div class="teach-list" style="margin-top:4px">
-        <span class="t">👤 ${owner.name} (${roleLabel(owner.role)})</span>
-        ${owner.lead_id?`<span class="t">⚑ تيم ${lead.name}</span>`:''}
-      </div></div>`;
-  }).join('')}</div>`;
+  const label=(title,arr)=>arr.length?`<div class="nav-group-label" style="color:var(--muted);margin:16px 4px 10px;font-size:13px;font-weight:800">${title} (${arr.length})</div><div class="grid3">${arr.map(teacherCardHTML).join('')}</div>`:'';
+  // العضو: قايمة واحدة بسيطة
+  if(ME.role==='member') return `<div class="grid3">${ts.map(teacherCardHTML).join('')}</div>`;
+  // غير كده: نقسّم حسب مستوى المالك
+  const mine=ts.filter(t=>t.owner_id===ME.id);
+  const ownerRole=t=>U(t.owner_id).role;
+  if(ME.role==='admin'){
+    const mgr=ts.filter(t=>ownerRole(t)==='manager');
+    const lead=ts.filter(t=>ownerRole(t)==='lead');
+    const mem=ts.filter(t=>ownerRole(t)==='member');
+    return label('مدرّسيني أنا',mine)+label('مدرّسين الأكونت مانجرز',mgr)+label('مدرّسين التيم ليدرز',lead)+label('مدرّسين الأعضاء',mem);
+  }
+  if(ME.role==='manager'){
+    const lead=ts.filter(t=>ownerRole(t)==='lead');
+    const mem=ts.filter(t=>ownerRole(t)==='member');
+    return label('مدرّسيني أنا',mine)+label('مدرّسين التيم ليدرز',lead)+label('مدرّسين الأعضاء',mem);
+  }
+  // تيم ليدر
+  const mem=ts.filter(t=>t.owner_id!==ME.id && ownerRole(t)==='member');
+  return label('مدرّسيني أنا',mine)+label('مدرّسين الأعضاء',mem);
 }
 
 function lateView(){
