@@ -269,13 +269,11 @@
       <div class="nav-group-label">المساحة</div>
       <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
       <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
+      <button class="nav-item" data-view="teachers"><span class="ico">🎓</span> المدرّسين</button>
       <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
       <button class="nav-item" data-view="late"><span class="ico">⏱</span> المتأخرات <span class="count" id="nLate"></span></button>
       <button class="nav-item" data-view="rank"><span class="ico">★</span> التقييم والترتيب</button>
       <button class="nav-item" data-view="reports"><span class="ico">▤</span> التقارير</button>
-      <div class="nav-group-label">النطاق</div>
-      <button class="nav-item" id="scopeReset"><span class="ico">◎</span> كل المدرّسين</button>
-      <div id="teacherNav"></div>
       <div class="me-card">
         <div class="ava" id="meAva"></div>
         <div><div style="font-weight:800;font-size:13px" id="meName"></div><div style="font-size:11px;color:var(--muted)" id="meRole"></div></div>
@@ -345,7 +343,7 @@ async function init(){
     showAuth();
     authErr('الاتصال بطيء أو متحجوب جوه المعاينة. لو فضلت المشكلة، جرّب تفتح الملف في متصفحك مباشرة.');
   }
-  sb.auth.onAuthStateChange((event,s)=>{ if(event==='SIGNED_OUT'){ location.reload(); } });
+  sb.auth.onAuthStateChange((event,s)=>{ if(event==='SIGNED_OUT' && !window.__suspended){ location.reload(); } });
 }
 function showAuth(){ hide('loading'); hide('app'); show('authScreen'); }
 function toggleMode(){
@@ -403,6 +401,21 @@ async function enterApp(){
     ({data:prof} = await sb.from('profiles').select('*').eq('id',user.id).single());
   }
   ME=prof;
+  // الموظف الموقوف ميدخلش — شاشة ثابتة
+  if(ME.active===false){
+    window.__suspended=true;
+    await sb.auth.signOut();
+    hide('authScreen'); hide('app');
+    document.getElementById('loading').innerHTML=
+      '<div style="text-align:center;max-width:360px;padding:30px">'+
+      '<div style="font-size:46px;margin-bottom:14px">🚫</div>'+
+      '<div style="font-weight:900;font-size:20px;margin-bottom:10px;color:var(--brand)">حسابك موقوف حاليًا</div>'+
+      '<div style="color:var(--muted);font-size:14px;line-height:1.8;margin-bottom:22px">حسابك على بورد المحتوى موقوف مؤقتًا.<br>لو في استفسار، كلّم الإدارة لإعادة التفعيل.</div>'+
+      '<button class="btn" onclick="location.reload()" style="height:42px;padding:0 22px">رجوع لتسجيل الدخول</button>'+
+      '</div>';
+    show('loading');
+    return;
+  }
   await reload();
   hide('loading'); show('app');
   wireApp(); render();
@@ -514,9 +527,9 @@ function descendantIds(){
   }
   return [...out];
 }
-function myMembers(){ // member ids visible to me (للتقييم والليدر بورد)
-  if(ME.role==='admin')return PROFILES.filter(p=>p.role==='member').map(p=>p.id);
-  return descendantIds().filter(id=>U(id).role==='member');
+function myMembers(){ // member ids visible to me (للتقييم والليدر بورد) — بدون الموقوفين
+  if(ME.role==='admin')return PROFILES.filter(p=>p.role==='member'&&p.active!==false).map(p=>p.id);
+  return descendantIds().filter(id=>U(id).role==='member'&&U(id).active!==false);
 }
 // كل الناس اللي ممكن يمسكوا مدرّسين/كروت في نطاقي (أي دور)
 function scopeIds(){
@@ -549,10 +562,10 @@ function render(){
   document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
   document.getElementById('navManage').style.display = ME.role==='admin'?'flex':'none';
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  renderTeacherNav();
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
   else if(view==='team')main.innerHTML=teamView();
+  else if(view==='teachers')main.innerHTML=teachersPage();
   else if(view==='detail')main.innerHTML=detailView();
   else if(view==='manage')main.innerHTML=manageView();
   else if(view==='late')main.innerHTML=lateView();
@@ -561,16 +574,7 @@ function render(){
   else if(view==='linktree')main.innerHTML=linkTreeView();
   if(view==='board')wireBoard();
 }
-function renderTeacherNav(){
-  const ids=scopeIds();const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
-  document.getElementById('teacherNav').innerHTML=ts.map(t=>{
-    const miss=missedDaysForTeacher(t.id).length;
-    return `<div class="tnav-row">
-    <button class="nav-item ${scopeTeacher===t.id?'active':''}" data-teacher="${t.id}"><span class="ico">●</span> ${t.name}${miss?`<span class="miss-badge">${miss}</span>`:''}</button>
-    <button class="tnav-link" data-link="${t.id}" title="لينكات المدرّس">🔗</button></div>`;}).join('');
-  document.querySelectorAll('[data-teacher]').forEach(b=>b.onclick=()=>{scopeTeacher=scopeTeacher===b.dataset.teacher?null:b.dataset.teacher;view='board';render();});
-  document.querySelectorAll('[data-link]').forEach(b=>b.onclick=()=>{linkTeacher=b.dataset.link;view='linktree';render();});
-}
+function renderTeacherNav(){ /* قايمة المدرّسين اتنقلت لخانة «المدرّسين» المستقلة */ }
 function statStrip(cs){
   const total=cs.length,by=id=>cs.filter(c=>c.status===id).length,done=by('ready')+by('published');
   const pct=total?Math.round(done/total*100):0,late=cs.filter(isLate).length;
@@ -678,62 +682,96 @@ function detailView(){
 function teamView(){
   if(ME.role==='member')return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">العرض ده للتيم ليدر والإدارة</div></div></div>
     <div class="empty"><div class="big">⚑</div>إنت داخل كعضو — تشوف شغلك في البورد.</div>`;
-  const cards=m=>CARDS.filter(c=>c.assignee_id===m);
-  // كارت العضو (بمؤشرات الأداء)
-  const memberCard=mid=>{
-    const m=U(mid),cs=cards(mid),active=cs.filter(c=>c.status!=='published');
-    const delivered=cs.filter(c=>c.status==='ready'||c.status==='published').length,late=cs.filter(isLate).length;
-    const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
-    const ts=TEACHERS.filter(t=>t.owner_id===mid);
-    const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
-    return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${mid}')"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
-      <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div>
+  return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">${ME.role==='admin'?'كل الفريق بكل المستويات':ME.role==='manager'?'تيم ليدرز وأعضاء تحتك':'أعضاء تيمك'}</div></div></div>
+    <div class="search" style="max-width:340px;margin-bottom:18px;border-color:var(--line2)"><span style="color:var(--faint)">⌕</span>
+      <input id="teamSearch" placeholder="ابحث باسم الموظف…" value="${escAttr(qTeam)}" oninput="qTeam=this.value;document.getElementById('teamListBox').innerHTML=teamGroupsHTML()"></div>
+    <div id="teamListBox">${teamGroupsHTML()}</div>`;
+}
+let qTeam='';
+function memberCardHTML(mid){
+  const m=U(mid),cs=CARDS.filter(c=>c.assignee_id===mid),active=cs.filter(c=>c.status!=='published');
+  const delivered=cs.filter(c=>c.status==='ready'||c.status==='published').length,late=cs.filter(isLate).length;
+  const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
+  const ts=TEACHERS.filter(t=>t.owner_id===mid);
+  const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
+  return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${mid}')"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
+    <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div>
+    <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
+    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><div class="n">${ts.length}</div><div class="l">مدرّسين</div></div>
+    <div class="kpi"><div class="n">${active.length}</div><div class="l">شغل حالي</div></div>
+    <div class="kpi"><div class="n">${delivered}</div><div class="l">سُلّم</div></div>
+    <div class="kpi"><div class="n" style="color:${late?'var(--danger)':'inherit'}">${late}</div><div class="l">متأخر</div></div></div>
+    <div class="wl"><div class="lbl"><span>عبء الشغل</span><span class="mono">${active.length} مهمة</span></div><div class="track">${seg||'<i style="width:100%;background:var(--raised2)"></i>'}</div></div>
+    <div class="wl" style="margin-top:12px"><div class="lbl"><span>التسليم في الميعاد</span><span class="mono">${onTimeRate}%</span></div>
+    <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div></div>`;
+}
+function leaderCardHTML(lid,role){
+  const l=U(lid);
+  const directs=PROFILES.filter(p=>p.lead_id===lid);
+  const subLabel = role==='manager'?'تيم ليدرز':'أعضاء';
+  const parent = U(l.lead_id);
+  const myTeachers=TEACHERS.filter(t=>t.owner_id===lid).length;
+  const allMembers=descendantsOf(lid).filter(id=>U(id).role==='member');
+  const pubCount=allMembers.reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)
+    + CARDS.filter(c=>c.assignee_id===lid&&c.status==='published').length;
+  return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${lid}')">
+    <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
+      <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div>
       <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
-      <div class="kpi-row"><div class="kpi"><div class="n">${active.length}</div><div class="l">شغل حالي</div></div>
-      <div class="kpi"><div class="n">${delivered}</div><div class="l">سُلّم</div></div>
-      <div class="kpi"><div class="n" style="color:${late?'var(--danger)':'inherit'}">${late}</div><div class="l">متأخر</div></div></div>
-      <div class="wl"><div class="lbl"><span>عبء الشغل</span><span class="mono">${active.length} مهمة</span></div><div class="track">${seg||'<i style="width:100%;background:var(--raised2)"></i>'}</div></div>
-      <div class="wl" style="margin-top:12px"><div class="lbl"><span>التسليم في الميعاد</span><span class="mono">${onTimeRate}%</span></div>
-      <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div>
-      <div class="teach-list">${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'}</div></div>`;
-  };
-  // كارت تيم ليدر / أكونت مانجر (مبسّط) — قابل للضغط لفتح تفاصيله
-  const leaderCard=(lid,role)=>{
-    const l=U(lid);
-    const directs=PROFILES.filter(p=>p.lead_id===lid);
-    const subLabel = role==='manager'?'تيم ليدرز':'أعضاء';
-    const parent = U(l.lead_id);
-    const myTeachers=TEACHERS.filter(t=>t.owner_id===lid).length;
-    const allMembers=descendantsOf(lid).filter(id=>U(id).role==='member');
-    const pubCount=allMembers.reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)
-      + CARDS.filter(c=>c.assignee_id===lid&&c.status==='published').length;
-    return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${lid}')">
-      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
-        <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div>
-        <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
-      <div class="kpi-row"><div class="kpi"><div class="n">${myTeachers}</div><div class="l">ماسك مدرّسين</div></div>
-      <div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
-      <div class="kpi"><div class="n">${pubCount}</div><div class="l">منشور</div></div></div>
-      ${TEACHERS.filter(t=>t.owner_id===lid).length?`<div class="teach-list"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">ماسكهم بنفسه:</span>${TEACHERS.filter(t=>t.owner_id===lid).map(t=>`<span class="t">${t.name}</span>`).join('')}</div>`:''}
-      <div class="teach-list" style="margin-top:8px"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">${subLabel}:</span>${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه مفيش ناس تحته</span>'}</div></div>`;
-  };
-  // النطاق: الأدمن يشوف الكل؛ غيره يشوف مرؤوسيه
-  const scope = ME.role==='admin' ? PROFILES.filter(p=>p.id!==ME.id) : PROFILES.filter(p=>descendantIds().includes(p.id));
+    <div class="kpi-row"><div class="kpi"><div class="n">${myTeachers}</div><div class="l">ماسك مدرّسين</div></div>
+    <div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
+    <div class="kpi"><div class="n">${pubCount}</div><div class="l">منشور</div></div></div>
+    <div class="teach-list" style="margin-top:8px"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">${subLabel}:</span>${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه مفيش ناس تحته</span>'}</div></div>`;
+}
+function teamGroupsHTML(){
+  let scope = (ME.role==='admin' ? PROFILES.filter(p=>p.id!==ME.id) : PROFILES.filter(p=>descendantIds().includes(p.id))).filter(p=>p.active!==false);
+  if(qTeam.trim()){const q=qTeam.trim();scope=scope.filter(p=>p.name.includes(q));}
   const managers=scope.filter(p=>p.role==='manager');
   const leads=scope.filter(p=>p.role==='lead');
   const members=scope.filter(p=>p.role==='member');
   let body='';
-  if(managers.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:6px 4px 10px;font-size:13px">أكونت مانجرز (${managers.length})</div><div class="grid3">${managers.map(m=>leaderCard(m.id,'manager')).join('')}</div>`;
-  if(leads.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">تيم ليدرز (${leads.length})</div><div class="grid3">${leads.map(l=>leaderCard(l.id,'lead')).join('')}</div>`;
-  if(members.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">أعضاء (${members.length})</div><div class="grid3">${members.map(m=>memberCard(m.id)).join('')}</div>`;
-  if(!body) body=`<div class="empty"><div class="big">⚑</div>لسه مفيش حد في فريقك.</div>`;
-  return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">${ME.role==='admin'?'كل الفريق بكل المستويات':ME.role==='manager'?'تيم ليدرز وأعضاء تحتك':'أعضاء تيمك'}</div></div></div>${body}`;
+  if(managers.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:6px 4px 10px;font-size:13px">أكونت مانجرز (${managers.length})</div><div class="grid3">${managers.map(m=>leaderCardHTML(m.id,'manager')).join('')}</div>`;
+  if(leads.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">تيم ليدرز (${leads.length})</div><div class="grid3">${leads.map(l=>leaderCardHTML(l.id,'lead')).join('')}</div>`;
+  if(members.length) body+=`<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">أعضاء (${members.length})</div><div class="grid3">${members.map(m=>memberCardHTML(m.id)).join('')}</div>`;
+  if(!body) body=`<div class="empty"><div class="big">⚑</div>${qTeam?'مفيش حد بالاسم ده':'لسه مفيش حد في فريقك'}.</div>`;
+  return body;
 }
 function descendantsOf(rootId){
   const out=new Set(); let frontier=[rootId];
   while(frontier.length){const next=[];PROFILES.forEach(p=>{if(p.lead_id&&frontier.includes(p.lead_id)&&!out.has(p.id)){out.add(p.id);next.push(p.id);}});frontier=next;}
   return [...out];
 }
+
+/* ---------- صفحة المدرّسين (مستقلة + بحث) ---------- */
+let qTeachers='';
+function teachersPage(){
+  return `<div class="page-head"><div><div class="page-title">المدرّسين</div><div class="page-sub">كل مدرّس · مين ماسكه، تيم مين، بوستات وأيام فايتة الشهر</div></div></div>
+    <div class="search" style="max-width:340px;margin-bottom:18px;border-color:var(--line2)"><span style="color:var(--faint)">⌕</span>
+      <input id="teacherSearch" placeholder="ابحث باسم المدرّس أو المسؤول…" value="${escAttr(qTeachers)}" oninput="qTeachers=this.value;document.getElementById('teacherListBox').innerHTML=teacherCards()"></div>
+    <div id="teacherListBox">${teacherCards()}</div>`;
+}
+function teacherCards(){
+  const ids=scopeIds();
+  let ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  if(qTeachers.trim()){const q=qTeachers.trim();ts=ts.filter(t=>(t.name+' '+U(t.owner_id).name).includes(q));}
+  if(!ts.length) return `<div class="empty"><div class="big">🎓</div>مفيش مدرّسين${qTeachers?' بالبحث ده':''}.</div>`;
+  return `<div class="grid3">${ts.map(t=>{
+    const owner=U(t.owner_id), lead=U(owner.lead_id);
+    const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
+    const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
+    return `<div class="member" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
+      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+        <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'} · راحة ${restName}</div></div>
+        <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
+      <div class="kpi-row"><div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
+        <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div></div>
+      <div class="teach-list" style="margin-top:4px">
+        <span class="t">👤 ${owner.name} (${roleLabel(owner.role)})</span>
+        ${owner.lead_id?`<span class="t">⚑ تيم ${lead.name}</span>`:''}
+      </div></div>`;
+  }).join('')}</div>`;
+}
+
 function lateView(){
   const cs=visibleCards().filter(isLate).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const head=`<div class="page-head"><div><div class="page-title">رادار المتأخرات</div><div class="page-sub">المحتوى اللي عدّى ميعاده ولسه مانتشرش</div></div></div>`;
@@ -867,12 +905,18 @@ function manageView(){
       parentSel=`<span style="color:var(--faint);font-size:12px">تابع للأدمن مباشرة</span>`;
     }
     const parentLabel = p.role==='member'?'التيم ليدر':p.role==='lead'?'الأكونت مانجر':'';
-    return `<div class="member">
+    const suspended = p.active===false;
+    const actions = ME.role==='admin' ? `<div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn ghost" style="flex:1;height:34px;font-size:12.5px" onclick="toggleActive('${p.id}')">${suspended?'▶ إعادة تفعيل':'⏸ إيقاف'}</button>
+        <button class="btn ghost" style="height:34px;font-size:12.5px;border-color:var(--danger);color:var(--danger)" onclick="deleteMember('${p.id}')">🗑 مسح</button>
+      </div>` : '';
+    return `<div class="member" style="${suspended?'opacity:.55':''}">
       <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(p.id)}">${initials(p.name)}</span>
-        <div><div class="name">${p.name}</div><div class="role">${roleLabel(p.role)}</div></div></div>
+        <div><div class="name">${p.name} ${suspended?'<span class="miss-badge" style="background:var(--raised2);color:var(--muted)">موقوف</span>':''}</div><div class="role">${roleLabel(p.role)}</div></div></div>
       <div class="field" style="margin-bottom:12px"><label>الدور</label>
         <select onchange="setRole('${p.id}',this.value)">${roleOpts}</select></div>
       ${parentLabel?`<div class="field"><label>${parentLabel}</label>${parentSel}</div>`:`<div class="field"><label>التبعية</label>${parentSel}</div>`}
+      ${actions}
     </div>`;
   };
   let body='';
@@ -913,6 +957,23 @@ window.setTeacherOwner=async function(tid,ownerId){
   const {error}=await sb.from('teachers').update({owner_id:ownerId}).eq('id',tid);
   if(error)return toast(error.message,true);
   await reload();render();toast('اتنقل المدرّس');
+};
+window.toggleActive=async function(id){
+  const p=U(id);
+  const target = (p.active===false); // currently suspended -> reactivate(true); active -> suspend(false)
+  const {error}=await sb.from('profiles').update({active:target}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload();render();toast(target?'اترجّع تفعيله':'اتوقف');
+};
+window.deleteMember=async function(id){
+  const p=U(id);
+  if(!confirm(`متأكد تمسح «${p.name}» نهائيًا؟ ده هيشيله من السايت. (الحساب نفسه ممكن تمسحه بعدين من Supabase)`))return;
+  // فك ارتباط مدرّسينه ومرؤوسينه الأول
+  await sb.from('teachers').update({owner_id:null}).eq('owner_id',id);
+  await sb.from('profiles').update({lead_id:null}).eq('lead_id',id);
+  const {error}=await sb.from('profiles').delete().eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتمسح');
 };
 
 /* ---------- add / edit teacher ---------- */
@@ -1052,7 +1113,6 @@ let toastT;function toast(m,bad){const t=document.getElementById('toast');t.text
 /* ---------- wiring ---------- */
 function wireApp(){
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
-  document.getElementById('scopeReset').onclick=()=>{scopeTeacher=null;view='board';render();};
   document.getElementById('addBtn').onclick=()=>openCard(null);
   document.getElementById('addTeacherBtn').onclick=()=>openTeacher(null);
   document.getElementById('mClose').onclick=closeModal;
