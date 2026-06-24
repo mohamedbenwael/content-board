@@ -332,7 +332,7 @@ const LINKS=[
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[];
-let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null;
+let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null;
 
 /* ---------- Auth ---------- */
 async function init(){
@@ -553,6 +553,7 @@ function render(){
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
   else if(view==='team')main.innerHTML=teamView();
+  else if(view==='detail')main.innerHTML=detailView();
   else if(view==='manage')main.innerHTML=manageView();
   else if(view==='late')main.innerHTML=lateView();
   else if(view==='reports')main.innerHTML=reportsView();
@@ -616,6 +617,64 @@ function wireBoard(){
   });
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
 }
+window.openPersonDetail=function(id){detailId=id;view='detail';render();};
+function teacherStatChip(t){
+  const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
+  return `<div class="rank-row" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
+    <span class="ava" style="width:34px;height:34px;background:${avaColor(t.id)}">${initials(t.name)}</span>
+    <div class="rank-main"><div class="nm">${t.name}</div>
+      <div class="sub"><span>📤 ${posts} بوست</span><span style="color:${missed?'var(--danger)':'inherit'}">${missed?'⚠ '+missed+' يوم فايت':'✓ ملتزم'}</span></div></div>
+    <span style="color:var(--faint)">🔗</span></div>`;
+}
+function detailView(){
+  const p=U(detailId); if(!p||!p.id){view='team';return teamView();}
+  const back=`<button class="btn ghost" onclick="view='team';render()" style="margin-bottom:16px">‹ رجوع للفريق</button>`;
+  const myTeachers=TEACHERS.filter(t=>t.owner_id===p.id);
+  const teachersBlock = myTeachers.length
+    ? `<div class="nav-group-label" style="color:var(--muted);margin:6px 4px 10px;font-size:13px">المدرّسين اللي ماسكهم (${myTeachers.length})</div>
+       <div class="lt-wrap" style="max-width:640px">${myTeachers.map(teacherStatChip).join('')}</div>`
+    : `<div class="lt-empty">مش ماسك مدرّسين.</div>`;
+
+  if(p.role==='member'){
+    const sc=memberScore(p.id);
+    const posts=memberPosts(p.id), missed=memberMissed(p.id);
+    const head=`<div class="page-head"><div><div class="page-title">${p.name}</div>
+      <div class="page-sub">عضو · تيم ${U(p.lead_id).name}</div></div></div>`;
+    const kpis=`<div class="stats" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat"><div class="k">التقييم</div><div class="v" style="color:${sc.score==null?'var(--faint)':scoreColor(sc.score)}">${sc.score==null?'—':sc.score}</div></div>
+      <div class="stat"><div class="k">بوستات الشهر</div><div class="v">${posts}</div></div>
+      <div class="stat"><div class="k">أيام فايتة</div><div class="v" style="color:${missed?'var(--danger)':'inherit'}">${missed}</div></div>
+      <div class="stat"><div class="k">الالتزام</div><div class="v">${sc.onTimeRate==null?'—':sc.onTimeRate+'٪'}</div></div></div>`;
+    return back+head+kpis+teachersBlock;
+  }
+  // lead / manager
+  const directs=PROFILES.filter(x=>x.lead_id===p.id);
+  const head=`<div class="page-head"><div><div class="page-title">${p.name}</div>
+    <div class="page-sub">${roleLabel(p.role)}${p.lead_id?' · تابع لـ '+U(p.lead_id).name:''}</div></div></div>`;
+  const allMembers=descendantsOf(p.id).filter(id=>U(id).role==='member');
+  const totalPosts=allMembers.reduce((s,id)=>s+memberPosts(id),0)+memberPosts(p.id);
+  const totalMissed=allMembers.reduce((s,id)=>s+memberMissed(id),0)+memberMissed(p.id);
+  const kpis=`<div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat"><div class="k">${p.role==='manager'?'تيم ليدرز':'أعضاء'} تحته</div><div class="v">${directs.length}</div></div>
+    <div class="stat"><div class="k">إجمالي الأعضاء</div><div class="v">${allMembers.length}</div></div>
+    <div class="stat"><div class="k">بوستات التيم</div><div class="v">${totalPosts}</div></div>
+    <div class="stat"><div class="k">أيام فايتة</div><div class="v" style="color:${totalMissed?'var(--danger)':'inherit'}">${totalMissed}</div></div></div>`;
+  const subLabel=p.role==='manager'?'التيم ليدرز':'الأعضاء';
+  const directsBlock = directs.length
+    ? `<div class="nav-group-label" style="color:var(--muted);margin:18px 4px 10px;font-size:13px">${subLabel} تحته (${directs.length})</div>
+       <div class="lt-wrap" style="max-width:640px">${directs.map(d=>{
+         const dt=TEACHERS.filter(t=>t.owner_id===d.id).length;
+         const sc=d.role==='member'?memberScore(d.id):null;
+         return `<div class="rank-row" style="cursor:pointer" onclick="openPersonDetail('${d.id}')">
+           <span class="ava" style="width:34px;height:34px;background:${avaColor(d.id)}">${initials(d.name)}</span>
+           <div class="rank-main"><div class="nm">${d.name}</div>
+             <div class="sub"><span>${roleLabel(d.role)}</span><span>🎓 ${dt} مدرّس</span>${sc&&sc.score!=null?`<span>★ ${sc.score}</span>`:''}</div></div>
+           <span style="color:var(--faint)">›</span></div>`;
+       }).join('')}</div>`
+    : `<div class="lt-empty" style="margin-top:14px">لسه مفيش ناس تحته.</div>`;
+  return back+head+kpis+directsBlock+teachersBlock;
+}
+
 function teamView(){
   if(ME.role==='member')return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">العرض ده للتيم ليدر والإدارة</div></div></div>
     <div class="empty"><div class="big">⚑</div>إنت داخل كعضو — تشوف شغلك في البورد.</div>`;
@@ -627,8 +686,9 @@ function teamView(){
     const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
     const ts=TEACHERS.filter(t=>t.owner_id===mid);
     const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
-    return `<div class="member"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
-      <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div></div>
+    return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${mid}')"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
+      <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div>
+      <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
       <div class="kpi-row"><div class="kpi"><div class="n">${active.length}</div><div class="l">شغل حالي</div></div>
       <div class="kpi"><div class="n">${delivered}</div><div class="l">سُلّم</div></div>
       <div class="kpi"><div class="n" style="color:${late?'var(--danger)':'inherit'}">${late}</div><div class="l">متأخر</div></div></div>
@@ -637,18 +697,25 @@ function teamView(){
       <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div>
       <div class="teach-list">${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'}</div></div>`;
   };
-  // كارت تيم ليدر / أكونت مانجر (مبسّط)
+  // كارت تيم ليدر / أكونت مانجر (مبسّط) — قابل للضغط لفتح تفاصيله
   const leaderCard=(lid,role)=>{
     const l=U(lid);
     const directs=PROFILES.filter(p=>p.lead_id===lid);
     const subLabel = role==='manager'?'تيم ليدرز':'أعضاء';
     const parent = U(l.lead_id);
-    return `<div class="member"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
-      <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div></div>
-      <div class="kpi-row"><div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
-      <div class="kpi"><div class="n">${descendantsOf(lid).filter(id=>U(id).role==='member').length}</div><div class="l">إجمالي الأعضاء</div></div>
-      <div class="kpi"><div class="n">${descendantsOf(lid).filter(id=>U(id).role==='member').reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)}</div><div class="l">منشور</div></div></div>
-      <div class="teach-list">${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه فاضي</span>'}</div></div>`;
+    const myTeachers=TEACHERS.filter(t=>t.owner_id===lid).length;
+    const allMembers=descendantsOf(lid).filter(id=>U(id).role==='member');
+    const pubCount=allMembers.reduce((s,id)=>s+CARDS.filter(c=>c.assignee_id===id&&c.status==='published').length,0)
+      + CARDS.filter(c=>c.assignee_id===lid&&c.status==='published').length;
+    return `<div class="member" style="cursor:pointer" onclick="openPersonDetail('${lid}')">
+      <div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(lid)}">${initials(l.name)}</span>
+        <div><div class="name">${l.name}</div><div class="role">${roleLabel(role)}${l.lead_id?' · تابع لـ '+parent.name:''}</div></div>
+        <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
+      <div class="kpi-row"><div class="kpi"><div class="n">${myTeachers}</div><div class="l">ماسك مدرّسين</div></div>
+      <div class="kpi"><div class="n">${directs.length}</div><div class="l">${subLabel} تحته</div></div>
+      <div class="kpi"><div class="n">${pubCount}</div><div class="l">منشور</div></div></div>
+      ${TEACHERS.filter(t=>t.owner_id===lid).length?`<div class="teach-list"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">ماسكهم بنفسه:</span>${TEACHERS.filter(t=>t.owner_id===lid).map(t=>`<span class="t">${t.name}</span>`).join('')}</div>`:''}
+      <div class="teach-list" style="margin-top:8px"><span style="font-size:11px;color:var(--muted);font-weight:700;width:100%;margin-bottom:4px">${subLabel}:</span>${directs.map(d=>`<span class="t">${d.name}</span>`).join('')||'<span class="t">لسه مفيش ناس تحته</span>'}</div></div>`;
   };
   // النطاق: الأدمن يشوف الكل؛ غيره يشوف مرؤوسيه
   const scope = ME.role==='admin' ? PROFILES.filter(p=>p.id!==ME.id) : PROFILES.filter(p=>descendantIds().includes(p.id));
