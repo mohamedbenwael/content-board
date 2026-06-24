@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بورد المحتوى</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    /* A to Z identity — navy on white */
+    --bg:#F4F6FA; --panel:#FFFFFF; --raised:#F7F9FC; --raised2:#EDF1F7;
+    --line:#E2E8F0; --line2:#D2DBE8;
+    --txt:#16223D; --muted:#64718A; --faint:#9AA6BC;
+    --brand:#1B2A4A; --brand-dim:#E7ECF5;        /* navy primary */
+    --idea:#4A6FB5; --doing:#E0922A; --review:#8B5CC2; --ready:#23A66B; --pub:#4F7A9E;
+    --danger:#D64545; --danger-dim:#FBE7E7;
+    --radius:14px; --radius-s:10px; --shadow:0 8px 26px rgba(27,42,74,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Tajawal',system-ui,sans-serif;
+    background:radial-gradient(1100px 500px at 90% -10%, #EAF0FA 0%, transparent 55%),
+      radial-gradient(800px 450px at -10% 110%, #EEF1F7 0%, transparent 50%), var(--bg);
+    color:var(--txt);font-size:14px;line-height:1.5;min-height:100%;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'Space Mono',monospace;font-variant-numeric:tabular-nums}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  ::selection{background:var(--brand);color:#fff}
+
+  /* ---------- Auth screen ---------- */
+  .auth-wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+  .auth{width:400px;max-width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:20px;padding:34px 30px;box-shadow:var(--shadow)}
+  .auth .logo{width:auto;height:64px;display:block;margin:0 auto 18px}
+  .auth .logo img{height:64px;width:auto;object-fit:contain}
+  .auth h1{text-align:center;font-size:22px;font-weight:900;margin-bottom:5px}
+  .auth .sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:24px}
+  .auth .field{margin-bottom:14px}
+  .auth label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:7px}
+  .auth input{width:100%;background:var(--raised);border:1px solid var(--line2);border-radius:11px;color:var(--txt);padding:12px 14px;outline:none;transition:.13s}
+  .auth input:focus{border-color:var(--brand)}
+  .auth .go{width:100%;height:46px;border-radius:11px;background:var(--brand);color:#fff;font-weight:800;font-size:15px;margin-top:8px;transition:.13s}
+  .auth .go:hover{filter:brightness(1.12)}
+  .auth .go:disabled{opacity:.6;cursor:default}
+  .auth .switch{text-align:center;margin-top:18px;color:var(--muted);font-size:13px}
+  .auth .switch b{color:var(--brand);cursor:pointer;font-weight:800}
+  .auth .err{background:var(--danger-dim);border:1px solid #f2c5c5;color:#b22b2b;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;display:none}
+  .auth .err.show{display:block}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid #2C3D5E;background:var(--brand);position:sticky;top:0;z-index:40}
+  .topbar .brand h1{color:#fff}
+  .topbar .brand .sub{color:#A9B6D0}
+  .topbar .search{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18)}
+  .topbar .search input{color:#fff}
+  .topbar .search input::placeholder{color:#9FB0CE}
+  .topbar .btn.ghost{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff}
+  .topbar .btn.ghost:hover{background:rgba(255,255,255,.18)}
+  .topbar .btn.primary{background:#fff;color:var(--brand)}
+  .topbar .btn.primary:hover{filter:brightness(.96)}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand .logo{height:40px;width:auto;flex:none;display:flex;align-items:center}
+  .brand .logo img{height:40px;width:auto;object-fit:contain}
+  .brand h1{font-size:18px;font-weight:900;letter-spacing:-.3px;line-height:1}
+  .brand .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .spacer{flex:1}
+  .search{display:flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:0 12px;height:40px;min-width:200px}
+  .search input{background:none;border:none;color:var(--txt);width:100%;outline:none}
+  .search input::placeholder{color:var(--faint)}
+  .btn{height:40px;padding:0 16px;border-radius:10px;font-weight:700;font-size:13.5px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--raised);transition:.15s}
+  .btn:hover{border-color:var(--line2);background:var(--raised2)}
+  .btn.primary{background:var(--brand);color:#fff;border:none;box-shadow:0 4px 14px rgba(27,42,74,.22)}
+  .btn.primary:hover{filter:brightness(1.12)}
+  .btn.ghost{background:none;border-color:var(--line)}
+
+  .shell{display:flex;min-height:calc(100vh - 71px)}
+  .side{width:248px;flex:none;border-left:1px solid #24344F;padding:20px 16px;display:flex;flex-direction:column;gap:6px;background:var(--brand)}
+  .side .nav-group-label{color:#7E8DAC}
+  .side .nav-item{color:#B7C2DA}
+  .side .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+  .side .nav-item.active{background:rgba(255,255,255,.14);color:#fff}
+  .side .nav-item .count{background:rgba(255,255,255,.14);color:#D5DEEE}
+  .side .tnav-link{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16);color:#B7C2DA}
+  .side .tnav-link:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.3);color:#fff}
+  .side .me-card{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14)}
+  .side .me-card #meName{color:#fff!important}
+  .side .me-card #meRole{color:#9FB0CE!important}
+  .side .me-card .out{color:#9FB0CE}
+  .side .me-card .out:hover{color:#FF9B9B}
+  .nav-group-label{font-size:10.5px;color:var(--faint);font-weight:700;letter-spacing:.6px;margin:14px 8px 6px}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;color:var(--muted);font-weight:700;transition:.13s;width:100%;text-align:right}
+  .nav-item .ico{width:18px;text-align:center;font-size:15px}
+  .nav-item:hover{background:var(--raised);color:var(--txt)}
+  .nav-item.active{background:var(--brand-dim);color:var(--brand)}
+  .nav-item .count{margin-inline-start:auto;font-size:11px;background:var(--raised2);color:var(--muted);border-radius:20px;padding:1px 8px}
+  .me-card{margin-top:auto;background:var(--raised);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center}
+  .me-card .out{margin-inline-start:auto;font-size:11px;color:var(--faint);cursor:pointer}
+  .me-card .out:hover{color:var(--danger)}
+
+  .main{flex:1;padding:24px 28px;overflow:auto;min-width:0}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+  .page-title{font-size:24px;font-weight:900;letter-spacing:-.5px}
+  .page-sub{color:var(--muted);font-size:13px;margin-top:3px}
+
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .stat .k{font-size:11.5px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px}
+  .stat .v{font-size:30px;font-weight:900;margin-top:6px;line-height:1}
+  .stat .bar{height:4px;border-radius:4px;background:var(--raised2);margin-top:12px;overflow:hidden}
+  .stat .bar>i{display:block;height:100%;border-radius:4px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+  .chip{padding:7px 13px;border-radius:20px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-weight:700;font-size:12.5px;transition:.13s}
+  .chip:hover{border-color:var(--line2);color:var(--txt)}
+  .chip.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .filters .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:start}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;min-height:120px;transition:.13s}
+  .col.drop{outline:2px dashed var(--brand);outline-offset:-4px;background:#1b1d22}
+  .col-head{display:flex;align-items:center;gap:9px;padding:4px 6px 12px;font-weight:800;font-size:13px}
+  .col-head .num{margin-inline-start:auto;background:var(--raised2);color:var(--muted);border-radius:20px;padding:1px 9px;font-size:11px}
+  .card{background:var(--raised);border:1px solid var(--line2);border-radius:var(--radius-s);padding:12px;margin-bottom:10px;cursor:grab;transition:.13s;position:relative}
+  .card:hover{border-color:var(--brand);transform:translateY(-1px);box-shadow:var(--shadow)}
+  .card.dragging{opacity:.4}
+  .card .ttl{font-weight:700;font-size:14px;line-height:1.4;margin-bottom:9px}
+  .card .meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tag{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
+  .tag.cat{background:var(--raised2);color:var(--txt)}
+  .tag.plat{background:var(--raised2);color:var(--muted)}
+  .card .foot{display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+  .ava{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;color:#0E1014;flex:none}
+  .who{font-size:11.5px;color:var(--muted);font-weight:700}
+  .due{margin-inline-start:auto;font-size:11px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:4px}
+  .due.late{color:var(--danger)}
+  .teacher-pill{font-size:10.5px;color:var(--brand);font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:5px}
+
+  .grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .member{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .member .top{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .member .name{font-weight:800;font-size:16px}
+  .member .role{font-size:11.5px;color:var(--muted)}
+  .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .kpi{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .kpi .n{font-size:22px;font-weight:900}
+  .kpi .l{font-size:10.5px;color:var(--muted);font-weight:700;margin-top:2px}
+  .wl{margin-top:6px}
+  .wl .lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:6px}
+  .wl .track{height:8px;background:var(--raised2);border-radius:6px;overflow:hidden;display:flex}
+  .wl .track i{height:100%}
+  .teach-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+  .teach-list .t{font-size:11px;background:var(--raised);border:1px solid var(--line);border-radius:7px;padding:4px 9px;color:var(--muted);font-weight:700}
+  .role-badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;background:var(--brand-dim);color:var(--brand);cursor:pointer}
+
+  /* teacher nav row with link button */
+  .tnav-row{display:flex;align-items:center;gap:4px}
+  .tnav-row .nav-item{flex:1}
+  .tnav-link{width:30px;height:30px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line);background:var(--panel);font-size:13px}
+  .tnav-link:hover{color:var(--brand);border-color:var(--brand);background:var(--brand-dim)}
+
+  /* link tree */
+  .lt-wrap{max-width:560px}
+  .lt-card{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;text-decoration:none;color:var(--txt);transition:.14s}
+  .lt-card:hover{border-color:var(--brand);transform:translateY(-1px);box-shadow:var(--shadow)}
+  .lt-ico{width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;font-size:20px;color:#fff}
+  .lt-card .nm{font-weight:800;font-size:15px}
+  .lt-card .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .lt-card .arr{margin-inline-start:auto;color:var(--faint);font-size:20px}
+  .lt-empty{background:var(--panel);border:1px dashed var(--line2);border-radius:var(--radius);padding:18px;color:var(--muted);text-align:center;font-size:13px;margin-bottom:12px}
+
+  .feed{max-width:780px}
+  .empty{text-align:center;color:var(--muted);padding:60px 20px}
+  .empty .big{font-size:40px;margin-bottom:12px;opacity:.5}
+  .report{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;max-width:780px}
+  .report h3{font-size:16px;margin-bottom:14px}
+  .rrow{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}
+  .rrow:last-child{border:none}.rrow .v{font-weight:800}
+
+  .overlay{position:fixed;inset:0;background:rgba(5,6,8,.7);backdrop-filter:blur(4px);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line2);border-radius:18px;width:560px;max-width:100%;box-shadow:var(--shadow);overflow:hidden}
+  .modal .mh{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+  .modal .mh h3{font-size:17px;font-weight:900}
+  .modal .mb{padding:22px;display:flex;flex-direction:column;gap:16px}
+  .field label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:7px}
+  .field input,.field select,.field textarea{width:100%;background:var(--raised);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:11px 13px;outline:none;transition:.13s}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .mf{display:flex;gap:10px;padding:16px 22px;border-top:1px solid var(--line)}
+  .x{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--muted);font-size:18px;border:1px solid var(--line)}
+  .x:hover{background:var(--raised2);color:var(--txt)}
+  .seg{display:flex;background:var(--raised);border:1px solid var(--line2);border-radius:10px;padding:3px;gap:3px}
+  .seg button{flex:1;padding:9px;border-radius:8px;font-weight:700;font-size:12.5px;color:var(--muted);transition:.13s}
+  .seg button.on{background:var(--raised2);color:var(--txt)}
+  .comments{display:flex;flex-direction:column;gap:10px;max-height:170px;overflow:auto}
+  .cmt{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .cmt .h{display:flex;gap:8px;align-items:center;margin-bottom:5px}.cmt .h b{font-size:12.5px}.cmt .h span{font-size:10.5px;color:var(--faint);margin-inline-start:auto}
+  .danger-link{color:var(--danger);font-weight:700;font-size:12.5px}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ready);color:#04150c;font-weight:800;padding:12px 22px;border-radius:12px;z-index:120;opacity:0;transition:.25s;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.bad{background:var(--danger);color:#fff}
+  .hidden{display:none!important}
+  .loader{min-height:100vh;display:grid;place-items:center;color:var(--muted)}
+  .spin{width:34px;height:34px;border:3px solid var(--line2);border-top-color:var(--brand);border-radius:50%;animation:sp 1s linear infinite;margin:0 auto 14px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  @media(max-width:1080px){.stats{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr 1fr}}
+  @media(max-width:720px){.side{display:none}.board{grid-template-columns:1fr}.two{grid-template-columns:1fr}.search{min-width:0;flex:1}}
+</style>
+</head>
+<body>
+
+<div id="loading" class="loader"><div style="text-align:center"><div class="spin"></div>بنحمّل…</div></div>
+
+<!-- AUTH -->
+<div id="authScreen" class="auth-wrap hidden">
+  <div class="auth">
+    <div class="logo"><img src="logo.png" alt="A to Z"></div>
+    <h1 id="authTitle">تسجيل الدخول</h1>
+    <div class="sub" id="authSub">ادخل على بورد المحتوى</div>
+    <div class="err" id="authErr"></div>
+    <div class="field" id="nameField" style="display:none">
+      <label>اسمك</label><input id="auName" placeholder="مثلاً: يوسف">
+    </div>
+    <div class="field"><label>الإيميل</label><input id="auEmail" type="email" placeholder="you@email.com"></div>
+    <div class="field"><label>الباسوورد</label><input id="auPass" type="password" placeholder="٦ حروف على الأقل"></div>
+    <button class="go" id="auGo">دخول</button>
+    <div class="switch" id="auSwitch">لسه معندكش حساب؟ <b id="auToggle">اعمل حساب</b></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="brand"><div class="logo"><img src="logo-white.png" alt="A to Z"></div><div><h1>بورد المحتوى</h1><div class="sub">A to Z — إدارة فريق المحتوى</div></div></div>
+    <div class="spacer"></div>
+    <div class="search"><span style="color:var(--faint)">⌕</span><input id="search" placeholder="ابحث في المحتوى…"></div>
+    <button class="btn ghost" id="addTeacherBtn">＋ مدرّس</button>
+    <button class="btn primary" id="addBtn">＋ فكرة جديدة</button>
+  </div>
+  <div class="shell">
+    <aside class="side">
+      <div class="nav-group-label">المساحة</div>
+      <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
+      <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
+      <button class="nav-item" data-view="late"><span class="ico">⏱</span> المتأخرات <span class="count" id="nLate"></span></button>
+      <button class="nav-item" data-view="reports"><span class="ico">▤</span> التقارير</button>
+      <div class="nav-group-label">النطاق</div>
+      <button class="nav-item" id="scopeReset"><span class="ico">◎</span> كل المدرّسين</button>
+      <div id="teacherNav"></div>
+      <div class="me-card">
+        <div class="ava" id="meAva"></div>
+        <div><div style="font-weight:800;font-size:13px" id="meName"></div><div style="font-size:11px;color:var(--muted)" id="meRole"></div></div>
+        <span class="out" id="logoutBtn">خروج</span>
+      </div>
+    </aside>
+    <main class="main" id="main"></main>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal">
+  <div class="mh"><h3 id="mTitle">فكرة جديدة</h3><button class="x" id="mClose">×</button></div>
+  <div class="mb" id="mBody"></div><div class="mf" id="mFoot"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   بورد المحتوى — موصّل بـ Supabase
+   ============================================================ */
+const SUPABASE_URL  = 'https://yplxjertpilrqnyezdaq.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_6wSDbZx7nkjxS59xWyg09g_EuzfaUCx';
+
+let sb=null;
+function fatal(msg){
+  document.getElementById('loading').innerHTML =
+    '<div style="text-align:center;max-width:340px;padding:24px">'+
+    '<div style="font-size:34px;margin-bottom:10px">⚠️</div>'+
+    '<div style="font-weight:800;color:#b22b2b;margin-bottom:8px">في مشكلة في التحميل</div>'+
+    '<div style="color:#64718A;font-size:13px;line-height:1.7">'+msg+'</div></div>';
+}
+try{
+  if(typeof supabase==='undefined'||!supabase.createClient){
+    fatal('مكتبة Supabase ماقدرتش تحمّل — ده بيحصل أحيانًا جوه المعاينة هنا بسبب حجب الإنترنت. جرّب تفتح الملف في متصفحك مباشرة، أو استنى لما نرفعه على Vercel.');
+  } else {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+}catch(e){ fatal('خطأ في الاتصال: '+e.message); }
+function withTimeout(p,ms,label){
+  return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout:'+label)),ms))]);
+}
+
+const STATUSES=[{id:'idea',name:'فكرة',color:'var(--idea)'},{id:'doing',name:'قيد العمل',color:'var(--doing)'},
+  {id:'review',name:'محتاج مراجعة',color:'var(--review)'},{id:'ready',name:'جاهز للنشر',color:'var(--ready)'},
+  {id:'published',name:'اتنشر',color:'var(--pub)'}];
+const CATS=['ميمز','ريلز وتيك توك','كاروسيل','ديزاين وتفاعل','يوتيوب'];
+const PLATS=[{id:'fb',name:'فيسبوك'},{id:'yt',name:'يوتيوب'},{id:'tk',name:'تيك توك'},{id:'ig',name:'انستجرام'}];
+const LINKS=[
+  {key:'link_youtube', name:'يوتيوب',       hint:'قناة المدرّس', ico:'▶', bg:'#FF0000'},
+  {key:'link_facebook',name:'فيسبوك',       hint:'صفحة المدرّس', ico:'f', bg:'#1877F2'},
+  {key:'link_tiktok',  name:'تيك توك',       hint:'حساب تيك توك',  ico:'♪', bg:'#111111'},
+  {key:'link_whatsapp',name:'جروب واتساب',   hint:'جروب الطلبة',  ico:'✆', bg:'#25D366'},
+];
+const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
+
+let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[];
+let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null;
+
+/* ---------- Auth ---------- */
+async function init(){
+  if(!sb) return; // fatal() already showed a message
+  try{
+    const {data:{session}} = await withTimeout(sb.auth.getSession(),8000,'getSession');
+    if(session) await enterApp(); else showAuth();
+  }catch(err){
+    // connection problem or timeout — let the user at least try to log in
+    showAuth();
+    authErr('الاتصال بطيء أو متحجوب جوه المعاينة. لو فضلت المشكلة، جرّب تفتح الملف في متصفحك مباشرة.');
+  }
+  sb.auth.onAuthStateChange((event,s)=>{ if(event==='SIGNED_OUT'){ location.reload(); } });
+}
+function showAuth(){ hide('loading'); hide('app'); show('authScreen'); }
+function toggleMode(){
+  signUpMode=!signUpMode;
+  document.getElementById('authTitle').textContent = signUpMode?'إنشاء حساب':'تسجيل الدخول';
+  document.getElementById('authSub').textContent = signUpMode?'اعمل حسابك في دقيقة':'ادخل على بورد المحتوى';
+  document.getElementById('nameField').style.display = signUpMode?'block':'none';
+  document.getElementById('auGo').textContent = signUpMode?'إنشاء الحساب':'دخول';
+  document.getElementById('auSwitch').innerHTML = signUpMode
+    ? 'عندك حساب بالفعل؟ <b id="auToggle">سجّل دخول</b>'
+    : 'لسه معندكش حساب؟ <b id="auToggle">اعمل حساب</b>';
+  document.getElementById('auToggle').onclick=toggleMode;
+  authErr('');
+}
+function authErr(m){ const e=document.getElementById('authErr'); e.textContent=m; e.classList.toggle('show',!!m); }
+async function doAuth(){
+  const email=document.getElementById('auEmail').value.trim();
+  const pass=document.getElementById('auPass').value;
+  const name=document.getElementById('auName').value.trim();
+  if(!email||!pass) return authErr('اكتب الإيميل والباسوورد');
+  if(signUpMode && !name) return authErr('اكتب اسمك');
+  const btn=document.getElementById('auGo'); btn.disabled=true; btn.textContent='ثانية…';
+  try{
+    if(signUpMode){
+      const {error}=await sb.auth.signUp({email,password:pass,options:{data:{name}}});
+      if(error) throw error;
+      const {error:e2}=await sb.auth.signInWithPassword({email,password:pass});
+      if(e2) throw e2;
+    }else{
+      const {error}=await sb.auth.signInWithPassword({email,password:pass});
+      if(error) throw error;
+    }
+    await enterApp();
+  }catch(err){
+    authErr(translateErr(err.message)); btn.disabled=false;
+    btn.textContent=signUpMode?'إنشاء الحساب':'دخول';
+  }
+}
+function translateErr(m){
+  if(/Invalid login/i.test(m)) return 'الإيميل أو الباسوورد غلط';
+  if(/already registered/i.test(m)) return 'الإيميل ده مسجّل قبل كده — سجّل دخول';
+  if(/at least 6/i.test(m)) return 'الباسوورد لازم ٦ حروف على الأقل';
+  if(/confirm/i.test(m)) return 'محتاج تأكيد الإيميل — افتح رسالة التأكيد على إيميلك';
+  return m;
+}
+
+/* ---------- Load data ---------- */
+async function enterApp(){
+  show('loading'); hide('authScreen');
+  const {data:{user}} = await sb.auth.getUser();
+  // my profile (trigger creates it on signup; ensure exists)
+  let {data:prof} = await sb.from('profiles').select('*').eq('id',user.id).single();
+  if(!prof){
+    await sb.from('profiles').insert({id:user.id, name:(user.user_metadata?.name||user.email.split('@')[0])});
+    ({data:prof} = await sb.from('profiles').select('*').eq('id',user.id).single());
+  }
+  ME=prof;
+  await reload();
+  hide('loading'); show('app');
+  wireApp(); render();
+}
+async function reload(){
+  const [p,t,c,cm]=await Promise.all([
+    sb.from('profiles').select('*'),
+    sb.from('teachers').select('*'),
+    sb.from('cards').select('*').order('created_at',{ascending:false}),
+    sb.from('comments').select('*').order('created_at',{ascending:true}),
+  ]);
+  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[];
+}
+
+/* ---------- helpers ---------- */
+const U=id=>PROFILES.find(x=>x.id===id)||{name:'—',id};
+const T=id=>TEACHERS.find(x=>x.id===id)||{name:'—',id};
+const ST=id=>STATUSES.find(s=>s.id===id);
+function avaColor(id){const i=PROFILES.findIndex(u=>u.id===id);return AVA[(i+AVA.length)%AVA.length];}
+function initials(n){return (n||'?').replace(/[()م.]/g,'').trim().split(' ')[0].slice(0,2);}
+function isLate(c){return c.status!=='published'&&c.due&&c.due<new Date().toISOString().slice(0,10);}
+function dueLabel(d){if(!d)return'—';const days=Math.round((new Date(d)-new Date(new Date().toISOString().slice(0,10)))/864e5);
+  if(days===0)return'النهاردة';if(days<0)return'متأخر '+(-days)+'ي';if(days===1)return'بكرة';return'بعد '+days+'ي';}
+function roleLabel(r){return r==='admin'?'أدمن':r==='lead'?'تيم ليدر':'عضو';}
+function myMembers(){ // member ids visible to me
+  if(ME.role==='admin')return PROFILES.filter(p=>p.role==='member').map(p=>p.id);
+  if(ME.role==='lead')return PROFILES.filter(p=>p.lead_id===ME.id).map(p=>p.id);
+  return [ME.id];
+}
+function visibleCards(){
+  const ids=myMembers(); let cs=CARDS.filter(c=>ids.includes(c.assignee_id)||c.assignee_id===ME.id);
+  if(ME.role==='member') cs=CARDS.filter(c=>c.assignee_id===ME.id);
+  if(scopeTeacher) cs=cs.filter(c=>c.teacher_id===scopeTeacher);
+  if(filterCat) cs=cs.filter(c=>c.category===filterCat);
+  const q=document.getElementById('search').value.trim();
+  if(q) cs=cs.filter(c=>(c.title+' '+T(c.teacher_id).name).includes(q));
+  return cs;
+}
+function canApprove(){return ME.role!=='member';}
+const show=id=>document.getElementById(id).classList.remove('hidden');
+const hide=id=>document.getElementById(id).classList.add('hidden');
+
+/* ---------- render (same UI as demo) ---------- */
+function render(){
+  const cs=visibleCards();
+  document.getElementById('nBoard').textContent=cs.length;
+  document.getElementById('nTeam').textContent=myMembers().length;
+  document.getElementById('nLate').textContent=cs.filter(isLate).length;
+  document.getElementById('meName').textContent=ME.name;
+  document.getElementById('meRole').textContent=roleLabel(ME.role)+(ME.role==='lead'?' · '+PROFILES.filter(p=>p.lead_id===ME.id).length+' أعضاء':'');
+  const ma=document.getElementById('meAva');ma.textContent=initials(ME.name);ma.style.background=avaColor(ME.id);
+  document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
+  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  renderTeacherNav();
+  const main=document.getElementById('main');
+  if(view==='board')main.innerHTML=boardView();
+  else if(view==='team')main.innerHTML=teamView();
+  else if(view==='late')main.innerHTML=lateView();
+  else if(view==='reports')main.innerHTML=reportsView();
+  else if(view==='linktree')main.innerHTML=linkTreeView();
+  if(view==='board')wireBoard();
+}
+function renderTeacherNav(){
+  const ids=myMembers();const ts=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
+  document.getElementById('teacherNav').innerHTML=ts.map(t=>`<div class="tnav-row">
+    <button class="nav-item ${scopeTeacher===t.id?'active':''}" data-teacher="${t.id}"><span class="ico">●</span> ${t.name}</button>
+    <button class="tnav-link" data-link="${t.id}" title="لينكات المدرّس">🔗</button></div>`).join('');
+  document.querySelectorAll('[data-teacher]').forEach(b=>b.onclick=()=>{scopeTeacher=scopeTeacher===b.dataset.teacher?null:b.dataset.teacher;view='board';render();});
+  document.querySelectorAll('[data-link]').forEach(b=>b.onclick=()=>{linkTeacher=b.dataset.link;view='linktree';render();});
+}
+function statStrip(cs){
+  const total=cs.length,by=id=>cs.filter(c=>c.status===id).length,done=by('ready')+by('published');
+  const pct=total?Math.round(done/total*100):0,late=cs.filter(isLate).length;
+  const S=(k,v,c,e='')=>`<div class="stat"><div class="k"><span class="dot" style="background:${c}"></span>${k}</div><div class="v">${v}</div>${e}</div>`;
+  return `<div class="stats">${S('إجمالي المحتوى',total,'var(--brand)',`<div class="bar"><i style="width:${pct}%;background:var(--ready)"></i></div>`)}
+    ${S('قيد العمل',by('doing'),'var(--doing)')}${S('محتاج مراجعة',by('review'),'var(--review)')}
+    ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
+}
+function boardView(){
+  const cs=visibleCards();const scopeName=scopeTeacher?T(scopeTeacher).name:'كل المدرّسين في نطاقك';
+  const ids=myMembers();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
+  let hint='';
+  if(myTeachers.length===0){
+    hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم الأدمن يضيفلك مدرّسين.'}</div>`;
+  }
+  const cols=STATUSES.map(s=>{const items=cs.filter(c=>c.status===s.id);
+    return `<div class="col" data-status="${s.id}"><div class="col-head"><span class="dot" style="background:${s.color}"></span>${s.name}<span class="num">${items.length}</span></div>
+      ${items.map(cardHTML).join('')||`<div style="color:var(--faint);font-size:12px;text-align:center;padding:14px 0">—</div>`}</div>`;}).join('');
+  const chip=(l,v)=>`<button class="chip ${filterCat===v?'on':''}" data-cat="${v??''}">${l}</button>`;
+  return `<div class="page-head"><div><div class="page-title">البورد</div><div class="page-sub">${scopeName} — اسحب الكارت لتغيير حالته</div></div></div>
+    ${statStrip(cs)}${hint}<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>
+    <div class="board">${cols}</div>`;
+}
+function cardHTML(c){const t=T(c.teacher_id),a=U(c.assignee_id),late=isLate(c),nc=COMMENTS.filter(x=>x.card_id===c.id).length;
+  return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill">● ${t.name}</div>
+    <div class="ttl">${esc(c.title)}</div><div class="meta"><span class="tag cat">${c.category||'—'}</span>
+    <span class="tag plat">${PLATS.find(p=>p.id===c.platform)?.name||c.platform||'—'}</span>${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
+    <div class="foot"><span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><span class="who">${a.name}</span>
+    <span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span></div></div>`;}
+function wireBoard(){
+  document.querySelectorAll('.card').forEach(el=>{
+    el.addEventListener('click',()=>openCard(el.dataset.id));
+    el.addEventListener('dragstart',e=>{e.dataTransfer.setData('id',el.dataset.id);el.classList.add('dragging');});
+    el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  });
+  document.querySelectorAll('.col').forEach(col=>{
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('drop');});
+    col.addEventListener('dragleave',()=>col.classList.remove('drop'));
+    col.addEventListener('drop',async e=>{e.preventDefault();col.classList.remove('drop');
+      const id=e.dataTransfer.getData('id'),ns=col.dataset.status,c=CARDS.find(x=>x.id===id);if(!c)return;
+      if(ME.role==='member'&&(ns==='ready'||ns==='published')&&c.status!=='ready'){toast('الأعضاء بيحوّلوا لـ «محتاج مراجعة» والتيم ليدر يوافق',true);return;}
+      if(c.status!==ns){c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);}
+    });
+  });
+  document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
+}
+function teamView(){
+  if(ME.role==='member')return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">العرض ده للتيم ليدر والإدارة</div></div></div>
+    <div class="empty"><div class="big">⚑</div>إنت داخل كعضو — تشوف شغلك في البورد.</div>`;
+  const ids=myMembers();const cards=m=>CARDS.filter(c=>c.assignee_id===m);
+  const cells=ids.map(mid=>{const m=U(mid),cs=cards(mid),active=cs.filter(c=>c.status!=='published');
+    const delivered=cs.filter(c=>c.status==='ready'||c.status==='published').length,late=cs.filter(isLate).length;
+    const onTime=cs.filter(c=>c.status==='published').length,onTimeRate=(onTime+late)?Math.round(onTime/Math.max(onTime+late,1)*100):100;
+    const ts=TEACHERS.filter(t=>t.owner_id===mid);
+    const seg=STATUSES.filter(s=>s.id!=='published').map(s=>{const n=cs.filter(c=>c.status===s.id).length;return n?`<i style="width:${n/Math.max(active.length,1)*100}%;background:${s.color}"></i>`:'';}).join('');
+    const adminCtl=ME.role==='admin'?`<span class="role-badge" onclick="promote('${mid}')">⇧ رقّي / غيّر الدور</span>`:'';
+    return `<div class="member"><div class="top"><span class="ava" style="width:40px;height:40px;font-size:14px;background:${avaColor(mid)}">${initials(m.name)}</span>
+      <div><div class="name">${m.name}</div><div class="role">عضو · تيم ${U(m.lead_id).name}</div></div></div>
+      <div class="kpi-row"><div class="kpi"><div class="n">${active.length}</div><div class="l">شغل حالي</div></div>
+      <div class="kpi"><div class="n">${delivered}</div><div class="l">سُلّم</div></div>
+      <div class="kpi"><div class="n" style="color:${late?'var(--danger)':'inherit'}">${late}</div><div class="l">متأخر</div></div></div>
+      <div class="wl"><div class="lbl"><span>عبء الشغل</span><span class="mono">${active.length} مهمة</span></div><div class="track">${seg||'<i style="width:100%;background:var(--raised2)"></i>'}</div></div>
+      <div class="wl" style="margin-top:12px"><div class="lbl"><span>التسليم في الميعاد</span><span class="mono">${onTimeRate}%</span></div>
+      <div class="track"><i style="width:${onTimeRate}%;background:${onTimeRate>=80?'var(--ready)':onTimeRate>=50?'var(--doing)':'var(--danger)'}"></i></div></div>
+      <div class="teach-list">${ts.map(t=>`<span class="t">${t.name}</span>`).join('')||'<span class="t">مفيش مدرّسين</span>'} ${adminCtl}</div></div>`;}).join('');
+  return `<div class="page-head"><div><div class="page-title">الفريق</div><div class="page-sub">${ME.role==='admin'?'كل الأعضاء':'أعضاء تيمك'}</div></div></div><div class="grid3">${cells}</div>`;
+}
+function lateView(){
+  const cs=visibleCards().filter(isLate).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  const head=`<div class="page-head"><div><div class="page-title">رادار المتأخرات</div><div class="page-sub">المحتوى اللي عدّى ميعاده ولسه مانتشرش</div></div></div>`;
+  if(!cs.length)return head+`<div class="empty"><div class="big">✓</div>مفيش حاجة متأخرة.</div>`;
+  return head+`<div style="max-width:780px;display:flex;flex-direction:column;gap:10px">${cs.map(c=>{const a=U(c.assignee_id);
+    return `<div class="card" data-id="${c.id}" onclick="openCard('${c.id}')" style="cursor:pointer;margin:0"><div style="display:flex;align-items:center;gap:12px">
+      <span class="ava" style="background:${avaColor(a.id)}">${initials(a.name)}</span><div style="flex:1"><div class="ttl" style="margin:0">${esc(c.title)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:3px">${T(c.teacher_id).name} · ${a.name} · ${ST(c.status).name}</div></div>
+      <span class="due late">⚠ ${dueLabel(c.due)}</span></div></div>`;}).join('')}</div>`;
+}
+function reportsView(){
+  const cs=visibleCards();const by=s=>cs.filter(c=>c.status===s).length;
+  const total=cs.length,late=cs.filter(isLate).length,byCat=CATS.map(c=>[c,cs.filter(x=>x.category===c).length]).filter(x=>x[1]);
+  return `<div class="page-head"><div><div class="page-title">التقرير الأسبوعي</div><div class="page-sub">ملخص شغلك — جاهز للواتساب</div></div>
+    <button class="btn" onclick="copyReport()">⧉ نسخ التقرير</button></div>
+    <div class="report"><h3>الملخص العام</h3>
+    <div class="rrow"><span>إجمالي المحتوى</span><span class="v mono">${total}</span></div>
+    <div class="rrow"><span>اتنشر</span><span class="v mono" style="color:var(--pub)">${by('published')}</span></div>
+    <div class="rrow"><span>جاهز للنشر</span><span class="v mono" style="color:var(--ready)">${by('ready')}</span></div>
+    <div class="rrow"><span>محتاج مراجعة</span><span class="v mono" style="color:var(--review)">${by('review')}</span></div>
+    <div class="rrow"><span>متأخر</span><span class="v mono" style="color:${late?'var(--danger)':'inherit'}">${late}</span></div>
+    <h3 style="margin-top:22px">حسب التصنيف</h3>${byCat.map(([c,n])=>`<div class="rrow"><span>${c}</span><span class="v mono">${n}</span></div>`).join('')||'<div style="color:var(--muted)">لسه مفيش</div>'}</div>`;
+}
+function copyReport(){const cs=visibleCards();const by=s=>cs.filter(c=>c.status===s).length;
+  const txt=`📊 تقرير المحتوى — ${ME.name}\n\nالإجمالي: ${cs.length}\n✅ اتنشر: ${by('published')}\n🟢 جاهز: ${by('ready')}\n🟣 مراجعة: ${by('review')}\n⚠️ متأخر: ${cs.filter(isLate).length}\n\n${new Date().toLocaleDateString('ar-EG')}`;
+  navigator.clipboard?.writeText(txt).then(()=>toast('التقرير اتنسخ'),()=>toast('مقدرش ينسخ',true));}
+
+/* ---------- promote (admin) ---------- */
+window.promote=async function(id){
+  const p=U(id);
+  const role=prompt(`دور ${p.name}؟ اكتب: admin أو lead أو member`,p.role);
+  if(!role||!['admin','lead','member'].includes(role))return;
+  let lead=p.lead_id;
+  if(role==='member'){
+    const leads=PROFILES.filter(x=>x.role==='lead');
+    const ln=prompt('تابع لأنهي تيم ليدر؟ اكتب اسمه:\n'+leads.map(l=>l.name).join(' / '), U(p.lead_id).name||'');
+    const f=leads.find(l=>l.name===ln); lead=f?f.id:null;
+  }
+  const {error}=await sb.from('profiles').update({role,lead_id:role==='member'?lead:null}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload();render();toast('اتعدّل');
+};
+
+/* ---------- add / edit teacher ---------- */
+window.openTeacher=function(tid){
+  const t=tid?T(tid):null;
+  // owner options: admin sees everyone; lead sees self + own members
+  let owners;
+  if(ME.role==='admin') owners=PROFILES;
+  else if(ME.role==='lead') owners=PROFILES.filter(p=>p.id===ME.id||p.lead_id===ME.id);
+  else owners=[ME];
+  document.getElementById('mTitle').textContent=t?'تعديل مدرّس':'إضافة مدرّس';
+  document.getElementById('mBody').innerHTML=`
+    <div class="field"><label>اسم المدرّس</label><input id="t_name" value="${t?escAttr(t.name):''}" placeholder="مثلاً: م. عمر الشربيني"></div>
+    <div class="field"><label>المادة</label><input id="t_subject" value="${t?escAttr(t.subject||''):''}" placeholder="مثلاً: إحصاء"></div>
+    <div class="field"><label>المسؤول عنه</label><select id="t_owner">
+      ${owners.map(o=>`<option value="${o.id}" ${t&&t.owner_id===o.id?'selected':(!t&&o.id===ME.id?'selected':'')}>${o.name} · ${roleLabel(o.role)}</option>`).join('')}
+    </select></div>`;
+  let acts=`<button class="btn primary" id="t_save">${t?'حفظ':'إضافة المدرّس'}</button>`;
+  if(t && ME.role==='admin') acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
+  document.getElementById('mFoot').innerHTML=acts;
+  document.getElementById('t_save').onclick=async()=>{
+    const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
+    const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner')};
+    let error;
+    if(t)({error}=await sb.from('teachers').update(data).eq('id',t.id));
+    else ({error}=await sb.from('teachers').insert(data));
+    if(error)return toast(error.message,true);
+    await reload();closeModal();render();toast(t?'اتحفظ':'اتضاف المدرّس');
+  };
+  if(t && ME.role==='admin') document.getElementById('t_del').onclick=async()=>{
+    if(confirm('متأكد تمسح المدرّس ده؟ هيتمسح من كل الأماكن.')){await sb.from('teachers').delete().eq('id',t.id);await reload();closeModal();if(view==='linktree')view='board';render();toast('اتمسح');}
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+
+/* ---------- link tree ---------- */
+function canEditTeacher(t){
+  if(ME.role==='admin')return true;
+  if(t.owner_id===ME.id)return true;
+  if(ME.role==='lead' && PROFILES.some(p=>p.id===t.owner_id && p.lead_id===ME.id))return true;
+  return false;
+}
+function normUrl(u){ if(!u)return''; u=u.trim(); if(!u)return''; return /^https?:\/\//i.test(u)?u:'https://'+u; }
+function linkTreeView(){
+  const t=T(linkTeacher); if(!t||!t.id) {view='board';return boardView();}
+  const owner=U(t.owner_id);
+  const editable=canEditTeacher(t);
+  const cards=LINKS.map(l=>{
+    const url=normUrl(t[l.key]);
+    if(!url) return `<div class="lt-empty">${l.name}: لسه مش متحطوط</div>`;
+    return `<a class="lt-card" href="${esc(url)}" target="_blank" rel="noopener">
+      <span class="lt-ico" style="background:${l.bg}">${l.ico}</span>
+      <div><div class="nm">${l.name}</div><div class="sub">${esc(url.replace(/^https?:\/\//,''))}</div></div>
+      <span class="arr">↗</span></a>`;
+  }).join('');
+  return `<div class="page-head"><div>
+      <div class="page-title">${t.name}</div>
+      <div class="page-sub">لينكات المدرّس · المسؤول: ${owner.name}</div></div>
+      ${editable?`<button class="btn primary" onclick="editLinks('${t.id}')">✎ تعديل اللينكات</button>`:''}</div>
+    <div class="lt-wrap">${cards}</div>`;
+}
+window.editLinks=function(tid){
+  const t=T(tid);
+  document.getElementById('mTitle').textContent='تعديل لينكات — '+t.name;
+  document.getElementById('mBody').innerHTML=LINKS.map(l=>`
+    <div class="field"><label>${l.name} <span style="color:var(--faint)">· ${l.hint}</span></label>
+    <input id="lk_${l.key}" value="${escAttr(t[l.key]||'')}" placeholder="https://…" dir="ltr" style="text-align:left"></div>`).join('');
+  document.getElementById('mFoot').innerHTML='<button class="btn primary" id="lk_save">حفظ اللينكات</button>';
+  document.getElementById('lk_save').onclick=async()=>{
+    const upd={};LINKS.forEach(l=>upd[l.key]=normUrl(document.getElementById('lk_'+l.key).value)||null);
+    const {error}=await sb.from('teachers').update(upd).eq('id',tid);
+    if(error)return toast(error.message,true);
+    await reload();closeModal();render();toast('اتحفظت اللينكات');
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+
+/* ---------- card modal ---------- */
+window.openCard=function(id){
+  const c=id?CARDS.find(x=>x.id===id):null;
+  const ids=myMembers();
+  const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>u.role==='member'&&ids.includes(u.id));
+  if(assignable.length===0 && ME.role!=='member') assignable.push(ME);
+  const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id)||t.owner_id===ME.id);
+  const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
+  document.getElementById('mTitle').textContent=c?c.title:'فكرة جديدة';
+  document.getElementById('mBody').innerHTML=`
+    <div class="field"><label>عنوان الفكرة</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
+    <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${c&&c.teacher_id===t.id?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
+    <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':''}>${u.name}</option>`).join('')}</select></div></div>
+    <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat">${CATS.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>المنصة</label><select id="f_plat">${PLATS.map(p=>`<option value="${p.id}" ${c&&c.platform===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div></div>
+    <div class="two"><div class="field"><label>الأسبوع</label><select id="f_week">${[1,2,3,4].map(w=>`<option value="${w}" ${c&&c.week===w?'selected':''}>الأسبوع ${w}</option>`).join('')}</select></div>
+    <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div></div>
+    <div class="field"><label>الحالة</label><div class="seg" id="f_status">${STATUSES.map(s=>`<button data-st="${s.id}" class="${(c?c.status:'idea')===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
+    ${c?`<div class="field"><label>التعليقات والمراجعة</label><div class="comments" id="f_comments">${cmts.length?cmts.map(cm=>`<div class="cmt"><div class="h"><b>${U(cm.author_id).name}</b><span>${new Date(cm.created_at).toLocaleDateString('ar-EG')}</span></div>${esc(cm.text)}</div>`).join(''):'<div style="color:var(--faint);font-size:12px">مفيش تعليقات</div>'}</div>
+    <div style="display:flex;gap:8px;margin-top:10px"><input id="f_newcmt" placeholder="اكتب ملاحظة…" style="flex:1;background:var(--raised);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:10px 12px"><button class="btn" id="f_addcmt">إضافة</button></div></div>`:''}`;
+  let cur=c?c.status:'idea';
+  document.querySelectorAll('#f_status button').forEach(b=>b.onclick=()=>{if(ME.role==='member'&&(b.dataset.st==='ready'||b.dataset.st==='published')){toast('الأعضاء بيوصلوا لحد «محتاج مراجعة»',true);return;}cur=b.dataset.st;document.querySelectorAll('#f_status button').forEach(x=>x.classList.toggle('on',x===b));});
+  const foot=document.getElementById('mFoot');
+  let acts=`<button class="btn primary" id="f_save">${c?'حفظ':'إضافة الفكرة'}</button>`;
+  if(c&&canApprove()&&c.status==='review')acts+=`<button class="btn" id="f_approve" style="border-color:var(--ready);color:var(--ready)">✓ موافقة</button><button class="btn" id="f_return" style="border-color:var(--danger);color:var(--danger)">↩ رجوع</button>`;
+  if(c)acts+=`<button class="danger-link" id="f_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
+  foot.innerHTML=acts;
+  if(c){document.getElementById('f_addcmt').onclick=addCmt;document.getElementById('f_newcmt').addEventListener('keydown',e=>{if(e.key==='Enter')addCmt();});}
+  async function addCmt(){const v=document.getElementById('f_newcmt').value.trim();if(!v)return;
+    const {error}=await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:v});if(error)return toast(error.message,true);
+    await reload();openCard(id);}
+  document.getElementById('f_save').onclick=async()=>{
+    const t=document.getElementById('f_title').value.trim();if(!t)return toast('اكتب عنوان',true);
+    const data={title:t,teacher_id:val('f_teacher')||null,assignee_id:val('f_assignee'),category:val('f_cat'),platform:val('f_plat'),week:+val('f_week'),due:val('f_due')||null,status:cur};
+    let error;
+    if(c)({error}=await sb.from('cards').update(data).eq('id',c.id));
+    else ({error}=await sb.from('cards').insert({...data,created_by:ME.id}));
+    if(error)return toast(error.message,true);
+    await reload();closeModal();render();toast(c?'اتحفظ':'اتضافت');
+  };
+  if(c&&canApprove()&&c.status==='review'){
+    document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready'}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
+    document.getElementById('f_return').onclick=async()=>{const note=prompt('سبب الرجوع:');if(note===null)return;
+      if(note.trim())await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:'↩ '+note.trim()});
+      await sb.from('cards').update({status:'doing'}).eq('id',c.id);await reload();closeModal();render();toast('رجع بملاحظة');};
+  }
+  if(c)document.getElementById('f_del').onclick=async()=>{if(confirm('متأكد تمسح؟')){await sb.from('cards').delete().eq('id',c.id);await reload();closeModal();render();toast('اتمسحت');}};
+  document.getElementById('overlay').classList.add('show');
+};
+const val=id=>document.getElementById(id).value;
+function closeModal(){document.getElementById('overlay').classList.remove('show');}
+function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+function escAttr(s){return (s||'').replace(/"/g,'&quot;');}
+let toastT;function toast(m,bad){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('bad',!!bad);t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400);}
+
+/* ---------- wiring ---------- */
+function wireApp(){
+  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
+  document.getElementById('scopeReset').onclick=()=>{scopeTeacher=null;view='board';render();};
+  document.getElementById('addBtn').onclick=()=>openCard(null);
+  document.getElementById('addTeacherBtn').onclick=()=>openTeacher(null);
+  document.getElementById('mClose').onclick=closeModal;
+  document.getElementById('overlay').onclick=e=>{if(e.target.id==='overlay')closeModal();};
+  document.getElementById('search').addEventListener('input',()=>{if(view!=='board')view='board';render();});
+  document.getElementById('logoutBtn').onclick=async()=>{await sb.auth.signOut();};
+}
+
+/* auth wiring */
+document.getElementById('auGo').onclick=doAuth;
+document.getElementById('auPass').addEventListener('keydown',e=>{if(e.key==='Enter')doAuth();});
+document.getElementById('auToggle').onclick=toggleMode;
+
+init();
+</script>
+</body>
+</html>
