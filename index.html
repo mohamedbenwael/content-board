@@ -276,8 +276,8 @@
 
   #tourBackdrop{position:fixed;inset:0;background:rgba(16,24,41,.62);z-index:80;display:none}
   #tourBackdrop.show{display:block}
-  .tour-spot{position:fixed;z-index:81;border-radius:12px;box-shadow:0 0 0 4px #E0922A,0 0 0 9999px rgba(16,24,41,.62);transition:.25s;pointer-events:none}
-  .tour-pop{position:fixed;z-index:82;background:var(--panel);color:var(--txt);border-radius:14px;padding:16px 18px;max-width:300px;box-shadow:var(--shadow);transition:.2s}
+  .tour-spot{position:fixed;z-index:95;border-radius:12px;box-shadow:0 0 0 4px #E0922A,0 0 0 9999px rgba(16,24,41,.62);transition:.25s;pointer-events:none}
+  .tour-pop{position:fixed;z-index:96;background:var(--panel);color:var(--txt);border-radius:14px;padding:16px 18px;max-width:300px;box-shadow:var(--shadow);transition:.2s}
   .tour-pop h4{font-size:15px;font-weight:900;margin-bottom:6px}
   .tour-pop p{font-size:13px;color:var(--muted);line-height:1.6}
   .tour-pop .row{display:flex;align-items:center;justify-content:space-between;margin-top:14px;gap:10px}
@@ -1573,6 +1573,12 @@ window.startTour=function(){
   showTourStep();
 };
 let tourEl=null, tourHandler=null;
+function isMobileTour(){return window.innerWidth<=720;}
+function tourDrawer(open){
+  const side=document.querySelector('.side'); if(!side)return;
+  if(open){side.classList.add('open'); side.style.zIndex='90';}
+  else{side.classList.remove('open'); side.style.zIndex='';}
+}
 function clearTourEl(){
   if(tourEl){
     tourEl.style.zIndex=tourEl.dataset._z||''; tourEl.style.position=tourEl.dataset._pos||'';
@@ -1583,6 +1589,7 @@ function clearTourEl(){
 }
 function endTour(){
   clearTourEl();
+  if(isMobileTour())tourDrawer(false);
   document.getElementById('tourBackdrop').classList.remove('show');
   document.getElementById('tourSpot').style.display='none';
   document.getElementById('tourPop').style.display='none';
@@ -1592,34 +1599,41 @@ function showTourStep(){
   clearTourEl();
   const s=tourList[tourIdx]; if(!s){endTour();return;}
   const el=document.querySelector(s.sel); if(!el){tourIdx++;return showTourStep();}
-  el.scrollIntoView({block:'center',behavior:'smooth'});
-  setTimeout(()=>{
-    const r=el.getBoundingClientRect();
-    const spot=document.getElementById('tourSpot');
-    spot.style.display='block';
-    spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
-    spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
-    const last=tourIdx===tourList.length-1;
-    // الخطوات اللي بتفتح صفحة (روابط القايمة) = المستخدم يدوس بنفسه عشان يكمّل
-    const clickStep = s.sel.indexOf('[data-view')===0 && !last;
-    if(clickStep){
-      tourEl=el;
-      el.dataset._z=el.style.zIndex||''; el.dataset._pos=el.style.position||'';
-      if(getComputedStyle(el).position==='static')el.style.position='relative';
-      el.style.zIndex='83'; el.style.cursor='pointer';
-      tourHandler=()=>{ setTimeout(()=>nextTour(),350); };
-      el.addEventListener('click',tourHandler,{once:true});
-    }
-    const pop=document.getElementById('tourPop');
-    pop.innerHTML=`<h4>${s.title}</h4><p>${s.text}</p>
-      <div class="row"><span class="step">${tourIdx+1} / ${tourList.length}</span>
-        <div class="btns">${last?'':'<button onclick="endTour()">تخطّي</button>'}
-        ${clickStep?'<button class="primary" onclick="nextTour()">👆 دوس عليها (أو تخطّى)</button>':`<button class="primary" onclick="nextTour()">${last?'تمام 🎉':'التالي ›'}</button>`}</div></div>`;
-    pop.style.display='block';
-    let top=r.bottom+12, left=Math.min(Math.max(12,r.left), Math.max(12,window.innerWidth-312));
-    if(top+180>window.innerHeight) top=Math.max(12,r.top-188);
-    pop.style.top=top+'px'; pop.style.left=left+'px';
-  },300);
+  // على الموبايل: لو العنصر جوه القايمة الجانبية نفتح الدرج، لو في الشريط العلوي نقفله
+  const inSide = !!el.closest('.side');
+  if(isMobileTour()) tourDrawer(inSide);
+  const doStep=()=>{
+    el.scrollIntoView({block:'center',behavior:'smooth'});
+    setTimeout(()=>{
+      const r=el.getBoundingClientRect();
+      const spot=document.getElementById('tourSpot');
+      spot.style.display='block';
+      spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
+      spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
+      const last=tourIdx===tourList.length-1;
+      const clickStep = s.sel.indexOf('[data-view')===0 && !last;
+      if(clickStep){
+        tourEl=el;
+        el.dataset._z=el.style.zIndex||''; el.dataset._pos=el.style.position||'';
+        if(getComputedStyle(el).position==='static')el.style.position='relative';
+        el.style.zIndex='97'; el.style.cursor='pointer';
+        tourHandler=()=>{ setTimeout(()=>nextTour(),380); };
+        el.addEventListener('click',tourHandler,{once:true});
+      }
+      const pop=document.getElementById('tourPop');
+      pop.innerHTML=`<h4>${s.title}</h4><p>${s.text}</p>
+        <div class="row"><span class="step">${tourIdx+1} / ${tourList.length}</span>
+          <div class="btns">${last?'':'<button onclick="endTour()">تخطّي</button>'}
+          ${clickStep?'<button class="primary" onclick="nextTour()">👆 دوس عليها</button>':`<button class="primary" onclick="nextTour()">${last?'تمام 🎉':'التالي ›'}</button>`}</div></div>`;
+      pop.style.display='block';
+      const pw=Math.min(300,window.innerWidth-24);
+      let top=r.bottom+12, left=Math.min(Math.max(12,r.left), Math.max(12,window.innerWidth-pw-12));
+      if(top+190>window.innerHeight) top=Math.max(12,r.top-198);
+      pop.style.top=top+'px'; pop.style.left=left+'px';
+    },300);
+  };
+  // ندي وقت للدرج يفتح/يقفل الأول على الموبايل
+  if(isMobileTour()) setTimeout(doStep,300); else doStep();
 }
 window.nextTour=function(){clearTourEl();tourIdx++; if(tourIdx>=tourList.length){endTour();return;} showTourStep();};
 window.addEventListener('resize',()=>{if(document.getElementById('tourBackdrop').classList.contains('show'))showTourStep();});
