@@ -319,6 +319,7 @@
       <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
       <button class="nav-item" data-view="late"><span class="ico">⏱</span> المتأخرات <span class="count" id="nLate"></span></button>
       <button class="nav-item" data-view="rank"><span class="ico">★</span> التقييم والترتيب</button>
+      <button class="nav-item" data-view="reports"><span class="ico">📊</span> التقارير الشهرية</button>
       <button class="nav-item" data-view="reports"><span class="ico">▤</span> التقارير</button>
       <div class="me-card">
         <div class="ava" id="meAva"></div>
@@ -390,7 +391,8 @@ const LINKS=[
 ];
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
-let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[];
+let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
+let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post';
 
 /* ---------- Auth ---------- */
@@ -483,15 +485,16 @@ async function enterApp(){
   wireApp(); render();
 }
 async function reload(){
-  const [p,t,c,cm,pl,nt]=await Promise.all([
+  const [p,t,c,cm,pl,nt,rp]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('teachers').select('*'),
     sb.from('cards').select('*').order('created_at',{ascending:false}),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
     sb.from('publish_log').select('*'),
     sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
+    sb.from('monthly_reports').select('*'),
   ]);
-  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[]; NOTIFS=nt.data||[];
+  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[]; NOTIFS=nt.data||[]; REPORTS=rp.data||[];
 }
 
 /* ---------- helpers ---------- */
@@ -665,6 +668,7 @@ function render(){
   else if(view==='late')main.innerHTML=lateView();
   else if(view==='reports')main.innerHTML=reportsView();
   else if(view==='rank')main.innerHTML=rankView();
+  else if(view==='reports')main.innerHTML=reportsView();
   else if(view==='linktree')main.innerHTML=linkTreeView();
   if(view==='board')wireBoard();
 }
@@ -987,7 +991,8 @@ function lateView(){
 }
 
 /* ---------- التقييم والترتيب + متابعة النشر ---------- */
-let rankTab='members';
+let rankTab='members', rankBy='score';
+function memberResults(id,ym){let f=0,v=0,e=0;TEACHERS.filter(t=>t.owner_id===id).forEach(t=>{const r=getReport(t.id,ym);if(r){f+=r.new_followers||0;v+=+r.views||0;e+=+r.engagement||0;}});return {f,v,e};}
 function rankView(){
   const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
   const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
@@ -995,18 +1000,23 @@ function rankView(){
     <div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
       <button class="${rankTab==='teachers'?'on':''}" onclick="rankTab='teachers';render()">متابعة المدرّسين</button>
-    </div>`;
+    </div>
+    ${rankTab==='members'?`<div class="filters" style="margin-bottom:14px"><button class="chip ${rankBy==='score'?'on':''}" onclick="rankBy='score';render()">رتّب بالأداء</button><button class="chip ${rankBy==='results'?'on':''}" onclick="rankBy='results';render()">رتّب بالنتائج 📈</button></div>`:''}`;
   return head + (rankTab==='members'? membersRank() : teachersTracking());
 }
 function membersRank(){
   const ids=myMembers();
   if(ids.length===0) return `<div class="empty"><div class="big">★</div>لسه مفيش أعضاء بشغل. أول ما يبدأوا ينزّلوا محتوى هيظهر ترتيبهم هنا.</div>`;
-  const rows=ids.map(id=>({id,...memberScore(id)})).sort((a,b)=>(b.score??-1)-(a.score??-1));
+  const ym=ymNow();
+  let rows=ids.map(id=>({id,...memberScore(id),res:memberResults(id,ym)}));
+  if(rankBy==='results') rows.sort((a,b)=>(b.res.f+b.res.v/100+b.res.e/100)-(a.res.f+a.res.v/100+a.res.e/100));
+  else rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
   let pos=0;
   return rows.map(r=>{
     const u=U(r.id); pos++;
     const isNew=r.score===null;
     const medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'';
+    const hasRes=r.res.f||r.res.v||r.res.e;
     return `<div class="rank-row ${pos<=3&&!isNew?'top':''}">
       <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
       ${avaP(r.id,38)}
@@ -1015,7 +1025,7 @@ function membersRank(){
           <span>📤 ${r.posts} بوست</span>
           <span style="color:${r.missed?'var(--danger)':'inherit'}">${r.missed?'⚠ فوّت '+r.missed+' يوم':'✓ ملتزم'}</span>
           ${r.onTimeRate!=null?`<span>⏱ التزام ${r.onTimeRate}٪</span>`:''}
-          ${r.returns?`<span>↩ رجع ${r.returns}</span>`:''}
+          ${hasRes?`<span style="color:var(--brand)">📈 +${fmtNum(r.res.f)} متابع · ${fmtNum(r.res.v)} مشاهدة · ${fmtNum(r.res.e)} تفاعل</span>`:''}
         </div></div>
       <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l">${isNew?'لسه بيتقيّم':'من ١٠٠'}</div></div>
     </div>`;
@@ -1324,6 +1334,93 @@ window.editLinks=function(tid){
   };
   document.getElementById('overlay').classList.add('show');
 };
+
+/* ---------- monthly reports 📊 ---------- */
+function ymNow(){return ymd(new Date()).slice(0,7);}
+function ymLabel(ym){const [y,m]=ym.split('-');const names=['يناير','فبراير','مارس','إبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];return names[+m-1]+' '+y;}
+function shiftYm(ym,delta){const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-1+delta,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function monthPosts(teacherId,ym){return PUBLOG.filter(l=>l.teacher_id===teacherId && (l.pub_date||'').slice(0,7)===ym).length;}
+function getReport(teacherId,ym){return REPORTS.find(r=>r.teacher_id===teacherId && r.ym===ym);}
+function fmtNum(n){n=+n||0;return n>=1000?(n/1000).toFixed(n%1000?1:0).replace('.0','')+'k':String(n);}
+function reportsView(){
+  if(!reportMonth)reportMonth=ymNow();
+  const ym=reportMonth;
+  const ids=scopeIds();
+  const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  const nav=`<div class="week-nav" style="margin-bottom:18px"><button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
+    <span class="label" style="font-weight:800;font-size:15px">${ymLabel(ym)}</span>
+    <button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',1);render()" style="width:auto;padding:0 14px;font-size:13px">الشهر التالي ›</button>
+    ${ym!==ymNow()?`<button onclick="reportMonth='${ymNow()}';render()" style="width:auto;padding:0 14px;font-size:13px">الشهر ده</button>`:''}</div>`;
+
+  // ملخّص الموظفين (مجمّع)
+  const members=PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin'&&u.active!==false);
+  const memberRows=members.map(m=>{
+    const mts=TEACHERS.filter(t=>t.owner_id===m.id);
+    if(!mts.length)return '';
+    let f=0,v=0,e=0,posts=0,filed=0;
+    mts.forEach(t=>{const r=getReport(t.id,ym);posts+=monthPosts(t.id,ym);if(r){f+=r.new_followers||0;v+=+r.views||0;e+=+r.engagement||0;filed++;}});
+    return `<div class="rank-row"><span class="rank-pos">${avaP(m.id,34)}</span>
+      <div class="rank-main"><div class="nm">${m.name}</div><div class="sub"><span>${mts.length} مدرّس</span><span>${filed}/${mts.length} تقرير اتسجّل</span><span>📤 ${posts} بوست</span></div></div>
+      <div style="display:flex;gap:14px;text-align:center;flex:none">
+        <div><div style="font-weight:800;font-size:15px">+${fmtNum(f)}</div><div style="font-size:10px;color:var(--faint)">متابعين</div></div>
+        <div><div style="font-weight:800;font-size:15px">${fmtNum(v)}</div><div style="font-size:10px;color:var(--faint)">مشاهدات</div></div>
+        <div><div style="font-weight:800;font-size:15px">${fmtNum(e)}</div><div style="font-size:10px;color:var(--faint)">تفاعل</div></div>
+      </div></div>`;
+  }).filter(Boolean).join('');
+
+  // تقارير المدرّسين
+  const teacherRows=myTeachers.map(t=>{
+    const r=getReport(t.id,ym), posts=monthPosts(t.id,ym), can=canEditReport(t);
+    return `<div class="rank-row" style="${r?'':'opacity:.85'}">
+      <span class="rank-pos">${avaT(t.id,34)}</span>
+      <div class="rank-main"><div class="nm">${t.name}</div>
+        <div class="sub"><span>📤 ${posts} بوست</span>${r?`<span>+${fmtNum(r.new_followers)} متابع</span><span>👁 ${fmtNum(r.views)}</span><span>❤ ${fmtNum(r.engagement)}</span>${r.proof_link||r.proof_file?'<span>📎 إثبات</span>':''}`:'<span style="color:var(--danger)">لسه مفيش تقرير</span>'}</div></div>
+      ${can?`<button class="btn" style="height:34px;flex:none" onclick="openReport('${t.id}')">${r?'تعديل':'＋ تقرير'}</button>`:''}</div>`;
+  }).join('');
+
+  return `<div class="page-head"><div><div class="page-title">التقارير الشهرية</div><div class="page-sub">إحصائيات فيسبوك لكل مدرّس + شغل السايت، مجمّعين في مكان واحد</div></div></div>
+    ${nav}
+    <div class="nav-group-label" style="margin:6px 4px 10px;font-size:13px;font-weight:800">📈 ملخّص الموظفين</div>
+    ${memberRows||'<div class="lt-empty">مفيش موظفين بمدرّسين في نطاقك.</div>'}
+    <div class="nav-group-label" style="margin:22px 4px 10px;font-size:13px;font-weight:800">🎓 تقارير المدرّسين</div>
+    ${teacherRows||'<div class="lt-empty">مفيش مدرّسين في نطاقك.</div>'}`;
+}
+function canEditReport(t){return ME.role==='admin'||t.owner_id===ME.id||descendantIds().includes(t.owner_id);}
+window.openReport=function(teacherId){
+  const t=T(teacherId), ym=reportMonth||ymNow(), r=getReport(teacherId,ym);
+  document.getElementById('mTitle').textContent=`تقرير ${t.name} — ${ymLabel(ym)}`;
+  document.getElementById('mBody').innerHTML=`
+    <div class="lt-empty" style="margin-bottom:4px">📤 السايت سجّل <b>${monthPosts(teacherId,ym)}</b> بوست منشور للمدرّس ده الشهر ده. أنت بتضيف أرقام فيسبوك تحت.</div>
+    <div class="two"><div class="field"><label>متابعين جداد +</label><input type="number" id="r_foll" value="${r?(r.new_followers||0):''}" placeholder="0"></div>
+      <div class="field"><label>المشاهدات</label><input type="number" id="r_views" value="${r?(r.views||0):''}" placeholder="0"></div></div>
+    <div class="field"><label>التفاعل (لايكات + كومنتات + شير)</label><input type="number" id="r_eng" value="${r?(r.engagement||0):''}" placeholder="0"></div>
+    <div class="field"><label>لينك الإثبات (PDF / صورة من جوجل درايف مثلاً)</label><input id="r_link" value="${r?escAttr(r.proof_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
+    <div class="field"><label>أو ارفع ملف إثبات (اختياري)</label><input type="file" id="r_file" accept="image/*,application/pdf">${r&&r.proof_file?`<a href="${escAttr(r.proof_file)}" target="_blank" style="font-size:12px;color:var(--brand)">📎 الملف المرفوع حاليًا</a>`:''}</div>
+    <div class="field"><label>ملاحظات (اختياري)</label><input id="r_notes" value="${r?escAttr(r.notes||''):''}" placeholder="أي ملاحظة عن أداء الشهر…"></div>`;
+  let acts=`<button class="btn primary" id="r_save">${r?'حفظ':'إضافة التقرير'}</button>`;
+  if(r)acts+=`<button class="danger-link" id="r_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
+  document.getElementById('mFoot').innerHTML=acts;
+  document.getElementById('r_save').onclick=async()=>{
+    let proofFile=r?r.proof_file:null;
+    const f=document.getElementById('r_file').files[0];
+    if(f){toast('بيرفع الملف…');const url=await uploadReportFile(f,teacherId,ym);if(url)proofFile=url;}
+    const data={teacher_id:teacherId,ym,new_followers:+val('r_foll')||0,views:+val('r_views')||0,engagement:+val('r_eng')||0,
+      proof_link:normUrl(val('r_link'))||null,proof_file:proofFile||null,notes:val('r_notes')||null,created_by:ME.id,updated_at:new Date().toISOString()};
+    const {error}=await sb.from('monthly_reports').upsert(data,{onConflict:'teacher_id,ym'});
+    if(error)return toast(error.message,true);
+    await reload();closeModal();render();toast('اتسجّل التقرير');
+  };
+  if(r)document.getElementById('r_del').onclick=async()=>{if(confirm('تمسح التقرير؟')){await sb.from('monthly_reports').delete().eq('id',r.id);await reload();closeModal();render();toast('اتمسح');}};
+  document.getElementById('overlay').classList.add('show');
+};
+async function uploadReportFile(file,teacherId,ym){
+  if(file.size>5*1024*1024){toast('الملف كبير (أقصى ٥ ميجا)',true);return null;}
+  const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
+  const path=`${teacherId}-${ym}-${Date.now()}.${ext}`;
+  const {error}=await sb.storage.from('reports').upload(path,file,{upsert:true});
+  if(error){toast('مفيش مكان تخزين للتقارير — استخدم اللينك بدل الملف',true);return null;}
+  return sb.storage.from('reports').getPublicUrl(path).data.publicUrl;
+}
 
 /* ---------- card modal ---------- */
 window.openCard=function(id,newKind){
