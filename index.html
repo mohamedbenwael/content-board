@@ -1617,7 +1617,7 @@ function showTourStep(){
         el.dataset._z=el.style.zIndex||''; el.dataset._pos=el.style.position||'';
         if(getComputedStyle(el).position==='static')el.style.position='relative';
         el.style.zIndex='97'; el.style.cursor='pointer';
-        tourHandler=()=>{ setTimeout(()=>nextTour(),380); };
+        tourHandler=()=>{ if(isMobileTour())tourDrawer(false); setTimeout(()=>nextTour(),420); };
         el.addEventListener('click',tourHandler,{once:true});
       }
       const pop=document.getElementById('tourPop');
