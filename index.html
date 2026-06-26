@@ -422,6 +422,10 @@ const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A'
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
 let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
+let TREVIEWS=[]; // تقييمات متابعة المدرّسين
+const TR_CRITERIA=[{k:'reply',name:'سرعة الرد',ico:'⚡'},{k:'satis',name:'رضا المدرّس',ico:'😀'},{k:'comm',name:'التواصل',ico:'🤝'},{k:'exec',name:'تنفيذ الطلبات',ico:'✅'}];
+const TR_OPTS=[{v:3,name:'كويس'},{v:2,name:'مقبول'},{v:1,name:'سيء'}];
+function getTReview(tid,ym){return TREVIEWS.find(r=>r.teacher_id===tid&&r.ym===ym);}
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post', boardScope='me';
 
 /* ---------- Auth ---------- */
@@ -545,9 +549,11 @@ async function reload(){
     sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
     sb.from('app_settings').select('*').eq('key','announcement'),
+    sb.from('teacher_reviews').select('*'),
   ]);
   PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
   ANNOUNCE=(small[4].data&&small[4].data[0])?small[4].data[0].value:null;
+  TREVIEWS=small[5].data||[];
 
   if(loadedAll){ await loadAllCards(); return; }
 
@@ -685,25 +691,41 @@ function memberResultsScore(memberId){
   if(!ts.length) return null; // موظف/مدرّسين جداد — مفيش تقرير متوقّع، مايتحسبش
   return ts.filter(t=>getReport(t.id,lastYm)).length / ts.length;
 }
-// نقطة تقييم العضو: جودة 50٪ + النزول 30٪ + التقرير 20٪ (لو حاجة ناقصة بنعيد توزيع وزنها)
+// إدارة المدرّس: متوسط تقييمات القائد (سرعة الرد/الرضا/التواصل/التنفيذ) لمدرّسي العضو هذا الشهر — 0..1 أو null
+function memberManageScore(memberId){
+  const ym=ymNow();
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId);
+  const vals=[];
+  ts.forEach(t=>{const r=getTReview(t.id,ym); if(r){[r.reply,r.satis,r.comm,r.exec].forEach(v=>{if(v)vals.push(v);});}});
+  if(!vals.length) return null;
+  const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  return (avg-1)/2; // سيء(1)=0 .. كويس(3)=1
+}
+// نقطة تقييم العضو: جودة 40٪ + إدارة المدرّس 20٪ + النزول 20٪ + التقرير 20٪ (إعادة توزيع لو حاجة ناقصة)
 function memberScore(memberId){
   const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
   const forgiven=memberForgiven(memberId);
   const expectedTotal=Math.max(0,expectedRaw-forgiven);
   const posts=memberPosts(memberId);
   const missed=memberMissed(memberId);
-  const qScore=memberQuality(memberId);                                  // جودة (قائد)
+  const qScore=memberQuality(memberId);          // جودة (قائد)
+  const mScore=memberManageScore(memberId);      // إدارة المدرّس (قائد)
   const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; // النزول
-  const rScore=memberResultsScore(memberId);                            // التقرير
+  const rScore=memberResultsScore(memberId);     // التقرير
   // عضو جديد لسه مفيش أي بيانات
-  if(qScore===null && pScore===null && rScore===null && posts<1)
-    return {score:null, posts, missed, qualityPct:null, postingPct:null, resultsPct:null};
+  if(qScore===null && mScore===null && pScore===null && rScore===null && posts<1)
+    return {score:null, posts, missed, qualityPct:null, managePct:null, postingPct:null, resultsPct:null};
   // إعادة توزيع الأوزان على الموجود بس
-  const parts=[]; if(qScore!==null)parts.push([qScore,.5]); if(pScore!==null)parts.push([pScore,.3]); if(rScore!==null)parts.push([rScore,.2]);
+  const parts=[];
+  if(qScore!==null)parts.push([qScore,.4]);
+  if(mScore!==null)parts.push([mScore,.2]);
+  if(pScore!==null)parts.push([pScore,.2]);
+  if(rScore!==null)parts.push([rScore,.2]);
   const totW=parts.reduce((s,p)=>s+p[1],0)||1;
   const score=Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/totW*100);
   return {score, posts, missed,
     qualityPct: qScore===null?null:Math.round(qScore*100),
+    managePct: mScore===null?null:Math.round(mScore*100),
     postingPct: pScore===null?null:Math.round(pScore*100),
     resultsPct: rScore===null?null:Math.round(rScore*100)};
 }
@@ -1185,6 +1207,7 @@ function myScoreCard(){
   if(ME.role==='member'){
     breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
       ${me.qualityPct!=null?`<span>💡 جودة ${me.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمتش</span>'}
+      ${me.managePct!=null?`<span>🤝 المدرّس ${me.managePct}٪</span>`:''}
       ${me.postingPct!=null?`<span>🗓 نزول ${me.postingPct}٪</span>`:''}
       ${me.resultsPct!=null?`<span>📈 تقارير ${me.resultsPct}٪</span>`:''}</div>`;
   } else {
@@ -1205,7 +1228,7 @@ function rankView(){
   const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
   const isMember=ME.role==='member';
   const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
-    <div class="page-sub">شغل شهر ${monthName} · جودة ٥٠٪ + النزول ٣٠٪ + التقرير ٢٠٪</div></div></div>
+    <div class="page-sub">شغل شهر ${monthName} · جودة ٤٠٪ + المدرّس ٢٠٪ + النزول ٢٠٪ + التقرير ٢٠٪</div></div></div>
     ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard():''}
     ${!isMember?`<div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
@@ -1220,6 +1243,7 @@ function rankSubLine(r){
   if(u.role==='member'){
     return `<div class="sub">
       ${r.qualityPct!=null?`<span>💡 جودة ${r.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمش</span>'}
+      ${r.managePct!=null?`<span>🤝 المدرّس ${r.managePct}٪</span>`:''}
       ${r.postingPct!=null?`<span>🗓 نزول ${r.postingPct}٪</span>`:''}
       ${r.resultsPct!=null?`<span>📈 تقارير ${r.resultsPct}٪</span>`:''}
     </div>`;
@@ -1310,6 +1334,11 @@ function teachersTracking(){
   if(ts.length===0) return `<div class="empty"><div class="big">📅</div>مفيش مدرّسين لسه.</div>`;
   return `<div class="grid3">${ts.map(t=>{
     const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted, owner=U(t.owner_id);
+    const canRate = ME.role!=='member' && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id));
+    const rev=getTReview(t.id,ymNow());
+    const revLine = rev
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px">${TR_CRITERIA.map(cr=>{const v=rev[cr.k];if(!v)return'';const c=v===3?'var(--ready)':v===2?'var(--doing)':'var(--danger)';return `<span class="tag plat" style="color:${c};border-color:${c}" title="${cr.name}">${cr.ico} ${TR_OPTS.find(o=>o.v===v).name}</span>`;}).join('')}</div>`
+      : (canRate?`<div style="font-size:11px;color:var(--faint);margin:8px 0 4px">لسه ماتقيّمش الشهر ده</div>`:'');
     return `<div class="member">
       <div class="top">${avaT(t.id,38)}
         <div><div class="name">${t.name}</div><div class="role">المسؤول: ${owner.name}</div></div></div>
@@ -1317,10 +1346,32 @@ function teachersTracking(){
         <div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
         <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div>
       </div>
+      ${revLine}
+      ${canRate?`<button class="btn ghost" style="height:32px;width:100%;margin-top:4px" onclick="openTReview('${t.id}')">${rev?'✎ عدّل تقييم المتابعة':'➕ قيّم متابعة المدرّس'}</button>`:''}
       ${miniCalendar(t)}
     </div>`;
   }).join('')}</div>`;
 }
+window.openTReview=function(tid){
+  const t=T(tid), ym=ymNow(), rev=getTReview(tid,ym)||{};
+  const cur={reply:rev.reply||null,satis:rev.satis||null,comm:rev.comm||null,exec:rev.exec||null};
+  document.getElementById('mTitle').textContent='تقييم متابعة: '+t.name;
+  document.getElementById('mBody').innerHTML=`
+    <div class="lt-empty" style="margin-bottom:10px;font-size:12.5px">تقييمك الشهر ده لإدارة المدرّس — بيدخل في تقييم المسؤول عنه.</div>
+    ${TR_CRITERIA.map(cr=>`<div class="field"><label>${cr.ico} ${cr.name}</label>
+      <div class="seg" id="tr_${cr.k}">${TR_OPTS.map(o=>`<button data-v="${o.v}" class="${cur[cr.k]===o.v?'on':''}">${o.name}</button>`).join('')}</div></div>`).join('')}
+    <div class="field"><label>ملاحظة (اختياري)</label><input id="tr_note" value="${rev.note?escAttr(rev.note):''}" placeholder="مثلاً: المدرّس طلب كذا…"></div>`;
+  document.getElementById('mFoot').innerHTML=`<button class="btn primary" id="tr_save" style="flex:1">حفظ التقييم</button>`;
+  TR_CRITERIA.forEach(cr=>{document.querySelectorAll('#tr_'+cr.k+' button').forEach(b=>b.onclick=()=>{
+    cur[cr.k]=+b.dataset.v;document.querySelectorAll('#tr_'+cr.k+' button').forEach(x=>x.classList.toggle('on',x===b));});});
+  document.getElementById('tr_save').onclick=async()=>{
+    const row={teacher_id:tid,ym,reply:cur.reply,satis:cur.satis,comm:cur.comm,exec:cur.exec,note:val('tr_note')||null,by_id:ME.id,updated_at:new Date().toISOString()};
+    const {error}=await sb.from('teacher_reviews').upsert(row,{onConflict:'teacher_id,ym'});
+    if(error)return toast(error.message,true);
+    await reload();closeModal();render();toast('اتسجّل تقييم المتابعة ✓');
+  };
+  document.getElementById('overlay').classList.add('show');
+};
 function miniCalendar(t){
   const done=publishedDays(t.id);
   const forgiven=forgivenDaysForTeacher(t.id);
@@ -1830,13 +1881,13 @@ async function checkWelcome(){
 /* كل ما تعمل تحديث مهم: زوّد رقم v واحد، واكتب الجديد في items.
    هتظهر لكل الناس مرة واحدة بس، وبعد ما يقفلوها مش هتتكرر. */
 const LATEST_UPDATE={
-  v:2,
+  v:3,
   title:'جديد في السايت 🎉',
   items:[
-    '⭐ نظام تقييم جديد وأعدل: جودة شغلك (تقييم القائد) ٥٠٪ + انتظامك في النزول ٣٠٪ + التقارير ٢٠٪.',
-    '🏆 ترتيب الشركة: كل واحد يشوف تقييمه وترتيبه بين زمايله.',
-    '👤 البورد بقى مفصول: «شغلي» و«شغل التيم» للقادة.',
-    '📊 التقارير الشهرية + 🗓 نظام الإجازة المرنة (أول يوم فايت في الأسبوع بيتسامح).',
+    '🤝 متابعة المدرّس: القائد بيقيّم كل شهر إدارة المدرّس (سرعة الرد، رضاه، التواصل، تنفيذ طلباته) — وبتدخل في التقييم.',
+    '⭐ التقييم الجديد: جودة ٤٠٪ + متابعة المدرّس ٢٠٪ + النزول ٢٠٪ + التقرير ٢٠٪، مع مستويات بالاسم واللون.',
+    '🏆 ترتيب الموظفين (مجموعات) + ترتيب التيمات.',
+    '👤 البورد مفصول: «شغلي» و«شغل التيم».',
     '⚡ تحسينات في السرعة والأمان + نسخة احتياطية.',
   ],
 };
@@ -1928,10 +1979,11 @@ function guideExtra(){
   // التقييم بالبلدي
   let scoring='';
   scoring = sec('⭐ التقييم بيتحسب إزاي (بالبلدي)')
-      + step('<b>جودة الشغل ٥٠٪:</b> تقييم القائد لأفكارك وشغلك (سيء/عادي/كويس/ممتاز) على كل بوست — وده أهم حاجة.')
-      + step('<b>الانتظام في النزول ٣٠٪:</b> إنك بتنزّل لمدرّسينك بانتظام (أول يوم فايت في الأسبوع بيتسامح).')
+      + step('<b>جودة الشغل ٤٠٪:</b> تقييم القائد لأفكارك وشغلك (سيء/عادي/كويس/ممتاز) على كل بوست.')
+      + step('<b>متابعة المدرّس ٢٠٪:</b> تقييم القائد شهريًا لإدارتك للمدرّس (سرعة الرد، رضاه، التواصل، تنفيذ طلباته).')
+      + step('<b>الانتظام في النزول ٢٠٪:</b> إنك بتنزّل لمدرّسينك بانتظام (أول يوم فايت في الأسبوع بيتسامح).')
       + step('<b>التقارير ٢٠٪:</b> إنك بتسجّل تقارير مدرّسينك عن الشهر اللي فات.')
-      + step('<b>عادل:</b> لو القائد ماقيّمش جودتك، الجزء ده مابيتحسبش عليك — درجتك بتتوزّع على الباقي. ومحدش بياخد صفر بالغلط.')
+      + step('<b>عادل:</b> أي جزء القائد ماقيّمهوش، مابيتحسبش عليك — الدرجة بتتوزّع على الباقي. ومحدش بياخد صفر بالغلط.')
       + (isLeader?step('<b>للقادة:</b> التيم ليدر = نص درجته شغله + نص أداء فريقه. الأكونت مانجر = أداء فريقه.'):'' );
 
   // نصايح
