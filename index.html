@@ -1205,7 +1205,7 @@ function rankView(){
   const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
   const isMember=ME.role==='member';
   const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
-    <div class="page-sub">شغل شهر ${monthName} · جودة ٥٠٪ + النزول ٣٠٪ + التقرير ٢٠٪ <span style="color:var(--brand)">· نسخة 3</span></div></div></div>
+    <div class="page-sub">شغل شهر ${monthName} · جودة ٥٠٪ + النزول ٣٠٪ + التقرير ٢٠٪</div></div></div>
     ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard():''}
     ${!isMember?`<div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
