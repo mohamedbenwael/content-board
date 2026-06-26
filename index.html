@@ -419,6 +419,7 @@ const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A'
 
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
 let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
+let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post';
 
 /* ---------- Auth ---------- */
@@ -529,7 +530,7 @@ async function enterApp(){
   await checkWeeklyReview();
   hide('loading'); show('app');
   wireApp(); render();
-  checkWelcome();
+  postLoadModals();
 }
 let loadedAll=false; // بقينا حمّلنا كل التاريخ؟
 function monthsBackISO(n){const d=new Date();d.setMonth(d.getMonth()-n);d.setDate(1);d.setHours(0,0,0,0);return d.toISOString();}
@@ -541,8 +542,10 @@ async function reload(){
     sb.from('teachers').select('*'),
     sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
+    sb.from('app_settings').select('*').eq('key','announcement'),
   ]);
   PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
+  ANNOUNCE=(small[4].data&&small[4].data[0])?small[4].data[0].value:null;
 
   if(loadedAll){ await loadAllCards(); return; }
 
@@ -1222,6 +1225,10 @@ function manageView(){
     ${ME.role==='admin'?`<div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="font-size:13px;line-height:1.6">💾 <b>نسخة احتياطية</b><br><span style="color:var(--muted)">نزّل نسخة من كل بيانات السايت على جهازك. اعملها كل فترة عشان تأمّن شغلك.</span></div>
       <button class="btn primary" style="height:38px;flex:none" onclick="backupNow(this)">⬇ نزّل نسخة احتياطية</button>
+    </div>
+    <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="font-size:13px;line-height:1.6">📢 <b>إعلان للفريق</b><br><span style="color:var(--muted)">اكتب رسالة تظهر لكل الفريق مرة واحدة أول ما يفتحوا السايت.</span></div>
+      <button class="btn" style="height:38px;flex:none" onclick="openAnnounceEditor()">✏ اكتب إعلان</button>
     </div>`:''}`;
   if(people.length===0) return head+`<div class="empty"><div class="big">⚙</div>لسه محدش سجّل غيرك. ابعت لينك السايت لفريقك، وأول ما يعملوا حساب هيظهروا هنا تقدر ترقّيهم وتوزّعهم.</div>`;
   const card=p=>{
@@ -1656,6 +1663,83 @@ async function checkWelcome(){
   const promoted = ME.seen_role && ME.seen_role!==ME.role; // شاف ترحيب قبل كده بدور مختلف = اترقّى
   openGuide({welcome:true, promoted});
 }
+
+/* ---------- رسالة "جديد في السايت" ---------- */
+/* كل ما تعمل تحديث مهم: زوّد رقم v واحد، واكتب الجديد في items.
+   هتظهر لكل الناس مرة واحدة بس، وبعد ما يقفلوها مش هتتكرر. */
+const LATEST_UPDATE={
+  v:1,
+  title:'جديد في السايت 🎉',
+  items:[
+    '📊 التقارير الشهرية: دلوقتي تقدر تسجّل إحصائيات فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات.',
+    '🗓 نظام الإجازة المرنة: أول يوم فايت في الأسبوع بيتسامح تلقائيًا، والباقي بيتحسب.',
+    '🧭 جولة تعريفية ودليل استخدام مفصّل — تلاقيه في «❓ الدليل».',
+    '✅ نظام الموافقة على التسجيل: أي حساب جديد بيستنى موافقة الأدمن.',
+    '⚡ تحسينات في السرعة + نسخة احتياطية للبيانات.',
+  ],
+};
+function checkUpdate(){
+  if(ME.seen_role!==ME.role)return;            // لو هيشوف الترحيب، مانعرضش التحديث في نفس المرة
+  if((ME.seen_update||0) >= LATEST_UPDATE.v)return;
+  openUpdate();
+}
+// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
+function postLoadModals(){
+  if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
+  if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
+  if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
+}
+window.openAnnounce=function(){
+  if(!ANNOUNCE)return;
+  document.getElementById('mTitle').textContent='📢 إعلان للفريق';
+  document.getElementById('mBody').innerHTML=`
+    <div style="text-align:center;padding:4px 0 8px"><div style="font-size:34px">📢</div>
+      <div style="font-weight:900;font-size:17px;margin-top:6px">${esc(ANNOUNCE.title||'إعلان')}</div></div>
+    <div style="font-size:14px;line-height:1.9;white-space:pre-wrap;color:var(--txt)">${esc(ANNOUNCE.body||'')}</div>`;
+  document.getElementById('mFoot').innerHTML=`<button class="btn primary" id="an_ok" style="flex:1">تمام 👍</button>`;
+  document.getElementById('an_ok').onclick=async()=>{
+    closeModal();
+    if((ME.seen_announce||0)<ANNOUNCE.v){ await sb.from('profiles').update({seen_announce:ANNOUNCE.v}).eq('id',ME.id); ME.seen_announce=ANNOUNCE.v; }
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+window.openAnnounceEditor=function(){
+  if(ME.role!=='admin')return;
+  document.getElementById('mTitle').textContent='✏ اكتب إعلان للفريق';
+  document.getElementById('mBody').innerHTML=`
+    <div class="lt-empty" style="margin-bottom:6px;font-size:12.5px">الإعلان ده هيظهر لكل الفريق مرة واحدة أول ما يفتحوا السايت.</div>
+    <div class="field"><label>عنوان الإعلان</label><input id="an_title" placeholder="مثلاً: اجتماع الأحد"></div>
+    <div class="field"><label>نص الإعلان</label><textarea id="an_body" rows="5" style="width:100%;resize:vertical" placeholder="اكتب رسالتك للفريق هنا…"></textarea></div>
+    ${ANNOUNCE?`<div class="lt-empty" style="font-size:12px">آخر إعلان: «${esc(ANNOUNCE.title||'')}»</div>`:''}`;
+  document.getElementById('mFoot').innerHTML=`<button class="btn primary" id="an_pub" style="flex:1">📢 انشر للفريق</button>`;
+  document.getElementById('an_pub').onclick=async()=>{
+    const title=val('an_title'), body=document.getElementById('an_body').value.trim();
+    if(!title&&!body)return toast('اكتب الإعلان الأول',true);
+    const v=((ANNOUNCE&&ANNOUNCE.v)||0)+1;
+    const value={v,title,body,date:new Date().toISOString()};
+    const {error}=await sb.from('app_settings').upsert({key:'announcement',value,updated_at:new Date().toISOString()},{onConflict:'key'});
+    if(error)return toast(error.message,true);
+    // الأدمن نفسه ميشفش إعلانه كبوب
+    await sb.from('profiles').update({seen_announce:v}).eq('id',ME.id); ME.seen_announce=v;
+    ANNOUNCE=value; closeModal(); toast('اتنشر الإعلان للفريق ✓');
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+window.openUpdate=function(){
+  document.getElementById('mTitle').textContent=LATEST_UPDATE.title;
+  document.getElementById('mBody').innerHTML=`
+    <div style="text-align:center;padding:4px 0 8px"><div style="font-size:38px">🎉</div>
+      <div style="font-weight:900;font-size:17px;margin-top:6px">فيه تحديثات جديدة في السايت</div>
+      <div style="color:var(--muted);font-size:13px;margin-top:3px">أهم الجديد:</div></div>
+    ${LATEST_UPDATE.items.map(t=>`<div style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)">
+      <span style="color:var(--ready);flex:none">●</span><div style="font-size:13.5px;line-height:1.6">${t}</div></div>`).join('')}`;
+  document.getElementById('mFoot').innerHTML=`<button class="btn primary" id="u_ok" style="flex:1">تمام، فهمت 👍</button>`;
+  document.getElementById('u_ok').onclick=async()=>{
+    closeModal();
+    if((ME.seen_update||0)<LATEST_UPDATE.v){ await sb.from('profiles').update({seen_update:LATEST_UPDATE.v}).eq('id',ME.id); ME.seen_update=LATEST_UPDATE.v; }
+  };
+  document.getElementById('overlay').classList.add('show');
+};
 function guideExtra(){
   const isLeader = ME.role!=='member';
   const sec=(title)=>`<div style="font-weight:900;font-size:14px;margin:18px 0 8px;color:var(--brand)">${title}</div>`;
