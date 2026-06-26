@@ -301,6 +301,15 @@
     <div class="field" id="nameField" style="display:none">
       <label>اسمك</label><input id="auName" placeholder="مثلاً: يوسف">
     </div>
+    <div class="field" id="roleField" style="display:none">
+      <label>دورك في الفريق</label>
+      <select id="auRole">
+        <option value="member">عضو</option>
+        <option value="lead">تيم ليدر</option>
+        <option value="manager">أكونت مانجر</option>
+      </select>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.6">ده اقتراح بس — الأدمن هو اللي بيوافق ويحدّد دورك النهائي.</div>
+    </div>
     <div class="field"><label>الإيميل</label><input id="auEmail" type="email" placeholder="you@email.com"></div>
     <div class="field"><label>الباسوورد</label><input id="auPass" type="password" placeholder="٦ حروف على الأقل"></div>
     <button class="go" id="auGo">دخول</button>
@@ -332,6 +341,7 @@
       <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
       <button class="nav-item" data-view="teachers"><span class="ico">🎓</span> المدرّسين</button>
       <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
+      <button class="nav-item" data-view="signups" id="navSignups" style="display:none"><span class="ico">📝</span> طلبات التسجيل <span class="count" id="nSignups"></span></button>
       <button class="nav-item" data-view="late"><span class="ico">⏱</span> المتأخرات <span class="count" id="nLate"></span></button>
       <button class="nav-item" data-view="rank"><span class="ico">★</span> التقييم والترتيب</button>
       <button class="nav-item" data-view="reports"><span class="ico">📊</span> التقارير الشهرية</button>
@@ -430,6 +440,7 @@ function toggleMode(){
   document.getElementById('authTitle').textContent = signUpMode?'إنشاء حساب':'تسجيل الدخول';
   document.getElementById('authSub').textContent = signUpMode?'اعمل حسابك في دقيقة':'ادخل على بورد المحتوى';
   document.getElementById('nameField').style.display = signUpMode?'block':'none';
+  document.getElementById('roleField').style.display = signUpMode?'block':'none';
   document.getElementById('auGo').textContent = signUpMode?'إنشاء الحساب':'دخول';
   document.getElementById('auSwitch').innerHTML = signUpMode
     ? 'عندك حساب بالفعل؟ <b id="auToggle">سجّل دخول</b>'
@@ -447,10 +458,14 @@ async function doAuth(){
   const btn=document.getElementById('auGo'); btn.disabled=true; btn.textContent='ثانية…';
   try{
     if(signUpMode){
+      const wanted=document.getElementById('auRole').value||'member';
       const {error}=await sb.auth.signUp({email,password:pass,options:{data:{name}}});
       if(error) throw error;
       const {error:e2}=await sb.auth.signInWithPassword({email,password:pass});
       if(e2) throw e2;
+      // نسجّل الدور المقترح + نخلّيه قيد المراجعة (الأدمن يوافق)
+      const {data:{user}}=await sb.auth.getUser();
+      if(user) await sb.from('profiles').update({wanted_role:wanted, approved:false}).eq('id',user.id);
     }else{
       const {error}=await sb.auth.signInWithPassword({email,password:pass});
       if(error) throw error;
@@ -496,23 +511,67 @@ async function enterApp(){
     return;
   }
   await reload();
+  // حساب قيد المراجعة (مش متوافق عليه لسه) — الأدمن دايمًا متوافق عليه
+  if(ME.role!=='admin' && ME.approved===false){
+    window.__suspended=true;
+    await sb.auth.signOut();
+    hide('authScreen'); hide('app');
+    document.getElementById('loading').innerHTML=
+      '<div style="text-align:center;max-width:380px;padding:30px">'+
+      '<div style="font-size:46px;margin-bottom:14px">⏳</div>'+
+      '<div style="font-weight:900;font-size:20px;margin-bottom:10px;color:var(--brand)">حسابك قيد المراجعة</div>'+
+      '<div style="color:var(--muted);font-size:14px;line-height:1.8;margin-bottom:22px">تم إنشاء حسابك بنجاح ✅<br>لسه مستني موافقة الأدمن عشان تقدر تدخل.<br>هتعرف أول ما حسابك يتفعّل.</div>'+
+      '<button class="btn" onclick="location.reload()" style="height:42px;padding:0 22px">رجوع</button>'+
+      '</div>';
+    show('loading');
+    return;
+  }
   await checkWeeklyReview();
   hide('loading'); show('app');
   wireApp(); render();
   checkWelcome();
 }
+let loadedAll=false; // بقينا حمّلنا كل التاريخ؟
+function monthsBackISO(n){const d=new Date();d.setMonth(d.getMonth()-n);d.setDate(1);d.setHours(0,0,0,0);return d.toISOString();}
+function monthsBackDate(n){const d=new Date();d.setMonth(d.getMonth()-n);d.setDate(1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';}
 async function reload(){
-  const [p,t,c,cm,pl,nt,rp]=await Promise.all([
+  // الجداول الصغيرة بالكامل
+  const small=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('teachers').select('*'),
-    sb.from('cards').select('*').order('created_at',{ascending:false}),
-    sb.from('comments').select('*').order('created_at',{ascending:true}),
-    sb.from('publish_log').select('*'),
     sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
   ]);
-  PROFILES=p.data||[]; TEACHERS=t.data||[]; CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[]; NOTIFS=nt.data||[]; REPORTS=rp.data||[];
+  PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
+
+  if(loadedAll){ await loadAllCards(); return; }
+
+  // الكروت: آخر ٣ شهور + أي كارت لسه مفتوح (مش منشور/مش خالص) مهما كان قديم
+  const cutoff=monthsBackISO(3);
+  const c=await sb.from('cards').select('*')
+    .or(`created_at.gte.${cutoff},status.not.in.(published,done)`)
+    .order('created_at',{ascending:false});
+  CARDS=c.data||[];
+  // الكومنتات للكروت المحمّلة بس
+  const ids=CARDS.map(x=>x.id);
+  if(ids.length){ const cm=await sb.from('comments').select('*').in('card_id',ids).order('created_at',{ascending:true}); COMMENTS=cm.data||[]; }
+  else COMMENTS=[];
+  // سجل النشر: آخر ٣ شهور (يكفي التقييم والشهر الحالي)
+  const pl=await sb.from('publish_log').select('*').gte('pub_date',monthsBackDate(3));
+  PUBLOG=pl.data||[];
 }
+async function loadAllCards(){
+  const [c,cm,pl]=await Promise.all([
+    sb.from('cards').select('*').order('created_at',{ascending:false}),
+    sb.from('comments').select('*').order('created_at',{ascending:true}),
+    sb.from('publish_log').select('*'),
+  ]);
+  CARDS=c.data||[]; COMMENTS=cm.data||[]; PUBLOG=pl.data||[];
+}
+window.loadOlderData=async function(btn){
+  if(btn){btn.disabled=true;btn.textContent='بيحمّل…';}
+  loadedAll=true; await loadAllCards(); render(); toast('اتحمّل كل التاريخ');
+};
 
 /* ---------- helpers ---------- */
 const U=id=>PROFILES.find(x=>x.id===id)||{name:'—',id};
@@ -674,6 +733,13 @@ function render(){
   ma.onclick=changeMyPhoto;
   document.getElementById('addTeacherBtn').style.display = ME.role==='member'?'none':'inline-flex';
   document.getElementById('navManage').style.display = (ME.role==='admin'||ME.role==='manager')?'flex':'none';
+  const ns=document.getElementById('navSignups');
+  if(ns){
+    const pend=pendingUsers().length;
+    ns.style.display = ME.role==='admin'?'flex':'none';
+    const c=document.getElementById('nSignups');
+    if(c){c.textContent=pend; c.style.display=pend?'inline-grid':'none';}
+  }
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
@@ -684,6 +750,7 @@ function render(){
   else if(view==='manage')main.innerHTML=manageView();
   else if(view==='late')main.innerHTML=lateView();
   else if(view==='reports')main.innerHTML=reportsView();
+  else if(view==='signups')main.innerHTML=signupsView();
   else if(view==='rank')main.innerHTML=rankView();
   else if(view==='wreport')main.innerHTML=weeklyReportView();
   else if(view==='linktree')main.innerHTML=linkTreeView();
@@ -703,6 +770,7 @@ function statStrip(cs){
     ${S('قيد العمل',by('doing'),'var(--doing)')}${S('محتاج مراجعة',by('review'),'var(--review)')}
     ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
 }
+function olderBtn(){ return loadedAll?'':`<div style="text-align:center;margin-top:20px"><button class="btn ghost" style="height:38px;padding:0 18px" onclick="loadOlderData(this)">⤓ حمّل الشغل الأقدم (قبل ٣ شهور)</button></div>`; }
 function boardView(){
   const all=visibleCards();
   const isTask=boardKind==='task';
@@ -723,7 +791,7 @@ function boardView(){
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
   return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}</div></div></div>
     ${tabs}${planBanner}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
-    <div class="board">${cols}</div>`;
+    <div class="board">${cols}</div>${olderBtn()}`;
 }
 function dueChip(c){
   if((c.kind||'post')==='post' && c.status==='published') return `<span class="due" style="color:var(--ready)">✓ اتنشر</span>`;
@@ -820,7 +888,7 @@ function agendaView(){
   let body=section('⚠ متأخر',buckets.late,'var(--danger)')+section('النهارده',buckets.today,'var(--brand)')
     +section('بكرة',buckets.tom)+section('الأسبوع ده',buckets.week)+section('لاحقًا',buckets.later)+section('من غير ميعاد',buckets.none);
   if(!body) body=`<div class="empty"><div class="big">📅</div>مفيش شغل مفتوح${agendaScope==='team'?' للفريق':''} حاليًا. كله متسلّم 👏</div>`;
-  return `<div class="page-head"><div><div class="page-title">الأجندة</div><div class="page-sub">شغلك مرتّب بالأيام — النهارده، بكرة، وبعدين</div></div></div>${toggle}${body}`;
+  return `<div class="page-head"><div><div class="page-title">الأجندة</div><div class="page-sub">شغلك مرتّب بالأيام — النهارده، بكرة، وبعدين</div></div></div>${toggle}${body}${olderBtn()}`;
 }
 function teacherStatChip(t){
   const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
@@ -1133,7 +1201,11 @@ function manageView(){
     ['members','أعضاء','member'],
   ];
   const head=`<div class="page-head"><div><div class="page-title">إدارة الفريق</div>
-    <div class="page-sub">رقّي الناس وحدد كل واحد تابع لمين · إجمالي ${people.length} شخص</div></div></div>`;
+    <div class="page-sub">رقّي الناس وحدد كل واحد تابع لمين · إجمالي ${people.length} شخص</div></div></div>
+    ${ME.role==='admin'?`<div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="font-size:13px;line-height:1.6">💾 <b>نسخة احتياطية</b><br><span style="color:var(--muted)">نزّل نسخة من كل بيانات السايت على جهازك. اعملها كل فترة عشان تأمّن شغلك.</span></div>
+      <button class="btn primary" style="height:38px;flex:none" onclick="backupNow(this)">⬇ نزّل نسخة احتياطية</button>
+    </div>`:''}`;
   if(people.length===0) return head+`<div class="empty"><div class="big">⚙</div>لسه محدش سجّل غيرك. ابعت لينك السايت لفريقك، وأول ما يعملوا حساب هيظهروا هنا تقدر ترقّيهم وتوزّعهم.</div>`;
   const card=p=>{
     const roleOpts=[['member','عضو'],['lead','تيم ليدر'],['manager','أكونت مانجر']]
@@ -1375,6 +1447,10 @@ function reportsView(){
     <button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',1);render()" style="width:auto;padding:0 14px;font-size:13px">الشهر التالي ›</button>
     ${ym!==ymNow()?`<button onclick="reportMonth='${ymNow()}';render()" style="width:auto;padding:0 14px;font-size:13px">الشهر ده</button>`:''}</div>`;
 
+  // تنبيه: لو بيشوف شهر أقدم من المحمّل، عدد البوستات ممكن يكون ناقص لحد ما يحمّل الأقدم
+  const oldMonth = !loadedAll && ym < monthsBackDate(3).slice(0,7);
+  const oldNote = oldMonth ? `<div class="lt-empty" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span style="font-size:12.5px">📤 عدد البوستات للشهور الأقدم مش محمّل كله. التقارير المسجّلة بتظهر عادي.</span><button class="btn ghost" style="height:32px;flex:none" onclick="loadOlderData(this)">حمّل الأقدم</button></div>` : '';
+
   // ملخّص الموظفين (مجمّع)
   const members=PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin'&&u.active!==false);
   const memberRows=members.map(m=>{
@@ -1403,12 +1479,79 @@ function reportsView(){
 
   return `<div class="page-head"><div><div class="page-title">التقارير الشهرية</div><div class="page-sub">إحصائيات فيسبوك لكل مدرّس + شغل السايت، مجمّعين في مكان واحد</div></div></div>
     ${nav}
+    ${oldNote}
     <div class="nav-group-label" style="margin:6px 4px 10px;font-size:13px;font-weight:800">📈 ملخّص الموظفين</div>
     ${memberRows||'<div class="lt-empty">مفيش موظفين بمدرّسين في نطاقك.</div>'}
     <div class="nav-group-label" style="margin:22px 4px 10px;font-size:13px;font-weight:800">🎓 تقارير المدرّسين</div>
     ${teacherRows||'<div class="lt-empty">مفيش مدرّسين في نطاقك.</div>'}`;
 }
 function canEditReport(t){return ME.role==='admin'||t.owner_id===ME.id||descendantIds().includes(t.owner_id);}
+
+/* ---------- طلبات التسجيل (الأدمن) ---------- */
+function pendingUsers(){return PROFILES.filter(p=>p.approved===false && p.role!=='admin' && p.active!==false);}
+function signupsView(){
+  if(ME.role!=='admin') return `<div class="empty"><div class="big">🔒</div>الصفحة دي للأدمن بس.</div>`;
+  const list=pendingUsers();
+  const rows=list.map(p=>`<div class="rank-row">
+      <span class="rank-pos">${avaP(p.id,36)}</span>
+      <div class="rank-main"><div class="nm">${esc(p.name)}</div>
+        <div class="sub"><span>اختار: ${roleLabel(p.wanted_role||'member')}</span><span>اتسجّل ${timeAgo(p.created_at)}</span></div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex:none;flex-wrap:wrap">
+        <select id="sr_${p.id}" style="height:36px">
+          <option value="member" ${(p.wanted_role||'member')==='member'?'selected':''}>عضو</option>
+          <option value="lead" ${p.wanted_role==='lead'?'selected':''}>تيم ليدر</option>
+          <option value="manager" ${p.wanted_role==='manager'?'selected':''}>أكونت مانجر</option>
+        </select>
+        <button class="btn primary" style="height:36px" onclick="approveUser('${p.id}')">قبول ✓</button>
+        <button class="danger-link" style="background:none;border:none" onclick="rejectUser('${p.id}')">رفض</button>
+      </div></div>`).join('');
+  return `<div class="page-head"><div><div class="page-title">طلبات التسجيل</div>
+    <div class="page-sub">الحسابات الجديدة مستنية موافقتك — راجع الدور واقبل أو ارفض</div></div></div>
+    ${list.length?rows:'<div class="lt-empty">مفيش طلبات تسجيل جديدة دلوقتي ✅</div>'}`;
+}
+window.approveUser=async function(id){
+  const role=document.getElementById('sr_'+id)?.value||'member';
+  const {error}=await sb.from('profiles').update({approved:true, role, seen_role:null}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload(); render(); toast('اتقبل الحساب ✓');
+};
+window.rejectUser=async function(id){
+  if(!confirm('ترفض الحساب ده؟ مش هيقدر يدخل.'))return;
+  const {error}=await sb.from('profiles').update({active:false}).eq('id',id);
+  if(error)return toast(error.message,true);
+  await reload(); render(); toast('اترفض الحساب');
+};
+window.backupNow=async function(btn){
+  if(ME.role!=='admin')return;
+  const old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='بيجهّز…';}
+  try{
+    // نجيب كل البيانات كاملة من السيرفر (مش المحمّل بس) عشان النسخة تبقى كاملة
+    const [p,t,c,cm,pl,nt,rp]=await Promise.all([
+      sb.from('profiles').select('*'),
+      sb.from('teachers').select('*'),
+      sb.from('cards').select('*'),
+      sb.from('comments').select('*'),
+      sb.from('publish_log').select('*'),
+      sb.from('notifications').select('*'),
+      sb.from('monthly_reports').select('*'),
+    ]);
+    const dump={
+      _app:'A to Z — بورد المحتوى',
+      _backup_date:new Date().toISOString(),
+      profiles:p.data||[], teachers:t.data||[], cards:c.data||[],
+      comments:cm.data||[], publish_log:pl.data||[], notifications:nt.data||[], monthly_reports:rp.data||[],
+    };
+    const counts=`${dump.cards.length} كارت · ${dump.teachers.length} مدرّس · ${dump.profiles.length} حساب · ${dump.monthly_reports.length} تقرير`;
+    const blob=new Blob([JSON.stringify(dump,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const d=new Date(), ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    a.href=url; a.download=`atoz-backup-${ds}.json`; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    toast('اتنزّلت النسخة ✓ ('+counts+')');
+  }catch(e){ toast('حصل خطأ في النسخة: '+(e.message||e),true); }
+  if(btn){btn.disabled=false;btn.textContent=old;}
+};
 window.openReport=function(teacherId){
   const t=T(teacherId), ym=reportMonth||ymNow(), r=getReport(teacherId,ym);
   document.getElementById('mTitle').textContent=`تقرير ${t.name} — ${ymLabel(ym)}`;
