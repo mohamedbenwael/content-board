@@ -420,7 +420,7 @@ const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A'
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
 let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
-let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post';
+let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post', boardScope='me';
 
 /* ---------- Auth ---------- */
 async function init(){
@@ -726,8 +726,15 @@ function scopeIds(){
   return [ME.id, ...descendantIds()];
 }
 function visibleCards(){
-  const ids=scopeIds(); let cs=CARDS.filter(c=>ids.includes(c.assignee_id));
-  if(ME.role==='member') cs=CARDS.filter(c=>c.assignee_id===ME.id);
+  let cs;
+  if(ME.role==='member'){
+    cs=CARDS.filter(c=>c.assignee_id===ME.id);          // العضو: شغله بس
+  } else if(boardScope==='team'){
+    const ids=scopeIds().filter(id=>id!==ME.id);         // التيم: كل اللي تحتي من غيري
+    cs=CARDS.filter(c=>ids.includes(c.assignee_id));
+  } else {
+    cs=CARDS.filter(c=>c.assignee_id===ME.id);           // شغلي أنا بس
+  }
   if(scopeTeacher) cs=cs.filter(c=>c.teacher_id===scopeTeacher);
   if(filterCat) cs=cs.filter(c=>c.category===filterCat);
   const q=document.getElementById('search').value.trim();
@@ -809,9 +816,13 @@ function boardView(){
   const tabs=`<div class="seg-tabs" style="margin-bottom:16px">
       <button class="${boardKind==='post'?'on':''}" onclick="boardKind='post';filterCat=null;render()">📱 البوستات</button>
       <button class="${boardKind==='task'?'on':''}" onclick="boardKind='task';filterCat=null;render()">✅ التاسكات</button></div>`;
+  const scopeTabs = (ME.role!=='member' && !scopeTeacher) ? `<div class="seg-tabs" style="margin-bottom:14px">
+      <button class="${boardScope==='me'?'on':''}" onclick="boardScope='me';render()">👤 شغلي</button>
+      <button class="${boardScope==='team'?'on':''}" onclick="boardScope='team';render()">👥 شغل التيم</button></div>` : '';
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
-  return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}</div></div></div>
-    ${tabs}${planBanner}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
+  const scopeSub = ME.role!=='member' ? (boardScope==='team'?' · شغل تيمك':' · شغلك إنت') : '';
+  return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}${scopeSub}</div></div></div>
+    ${tabs}${scopeTabs}${planBanner}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>${olderBtn()}`;
 }
 function dueChip(c){
@@ -1887,7 +1898,9 @@ window.openCard=function(id,newKind){
   const ids=scopeIds();
   const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin');
   if(assignable.length===0) assignable.push(ME);
-  const teacherOpts=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  const initAssignee = c?c.assignee_id:ME.id;
+  const teachersForOwner=(oid)=>TEACHERS.filter(t=>t.owner_id===oid);
+  const teacherOpts=teachersForOwner(initAssignee);
   const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
   // تاسك مطلوبة من قائد لعضو → العضو ميعدّلش فيها
   const taskLocked = isTask && c && c.requested_by && c.assignee_id===ME.id && c.requested_by!==ME.id && ME.role==='member';
@@ -1952,10 +1965,30 @@ window.openCard=function(id,newKind){
 
   // المدرّسين المتعدّدين (للتاسك)
   let curTeachers = c?(c.teacher_ids||[]).slice():[];
-  if(!taskLocked) document.querySelectorAll('#f_teachers button').forEach(b=>b.onclick=()=>{
-    const tid=b.dataset.tid;
-    if(curTeachers.includes(tid)){curTeachers=curTeachers.filter(x=>x!==tid);b.classList.remove('on');}
-    else{curTeachers.push(tid);b.classList.add('on');}});
+  function wireTeacherButtons(){
+    if(taskLocked)return;
+    document.querySelectorAll('#f_teachers button').forEach(b=>b.onclick=()=>{
+      const tid=b.dataset.tid;
+      if(curTeachers.includes(tid)){curTeachers=curTeachers.filter(x=>x!==tid);b.classList.remove('on');}
+      else{curTeachers.push(tid);b.classList.add('on');}});
+  }
+  wireTeacherButtons();
+
+  // لما يتغيّر المسؤول → قايمة المدرّسين تتغيّر لمدرّسين المسؤول الجديد
+  const asgEl=document.getElementById('f_assignee');
+  if(asgEl && !taskLocked) asgEl.onchange=()=>{
+    const oid=asgEl.value;
+    const list=teachersForOwner(oid);
+    if(isTask){
+      curTeachers=[]; // مدرّسين مختلفين، نبدأ من جديد
+      const wrap=document.getElementById('f_teachers');
+      wrap.innerHTML = list.length?list.map(t=>`<button data-tid="${t.id}" style="flex:none">${t.name}</button>`).join(''):'<span style="color:var(--faint);font-size:12px">مفيش مدرّسين للمسؤول ده</span>';
+      wireTeacherButtons();
+    } else {
+      const sel=document.getElementById('f_teacher');
+      if(sel) sel.innerHTML = list.length?list.map(t=>`<option value="${t.id}">${t.name}</option>`).join(''):'<option value="">— مفيش مدرّسين للمسؤول ده —</option>';
+    }
+  };
 
   const foot=document.getElementById('mFoot');
   let acts = taskLocked ? '' : `<button class="btn primary" id="f_save">${c?'حفظ':'إضافة'}</button>`;
