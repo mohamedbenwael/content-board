@@ -605,9 +605,8 @@ function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMo
 function ymd(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);}
 // الأيام المطلوب فيها نشر للمدرّس — من تاريخ الإسناد أو أول الشهر (الأحدث) لحد إمبارح
 function expectedDays(teacher){
-  const rest = (teacher.rest_day==null?5:teacher.rest_day);
   const days=[]; const today=new Date(); today.setHours(0,0,0,0);
-  // نبدأ من الأحدث بين: أول الشهر، وتاريخ إسناد المدرّس للموظف
+  // كل الأيام مطلوبة — مفيش يوم راحة ثابت (السماح بيتطبّق أسبوعيًا في العدّ)
   let start=new Date(monthStart());
   if(teacher.assigned_at){
     const a=new Date(teacher.assigned_at+'T00:00:00');
@@ -615,10 +614,24 @@ function expectedDays(teacher){
   }
   let d=new Date(start);
   while(d < today){
-    if(d.getDay()!==rest) days.push(ymd(d));
+    days.push(ymd(d));
     d=new Date(d); d.setDate(d.getDate()+1);
   }
   return days;
+}
+// مفتاح الأسبوع (بيبدأ السبت)
+function weekKeySat(ds){const d=new Date(ds+'T00:00:00'); const off=(d.getDay()+1)%7; d.setDate(d.getDate()-off); return ymd(d);}
+// أول يوم فايت في كل أسبوع بيتسامح (إجازة مرنة) — بنرجّع مجموعة الأيام المسموح بيها
+function forgivenDaysForTeacher(teacherId){
+  const raw=missedDaysForTeacher(teacherId).slice().sort();
+  const seen=new Set(), forgiven=new Set();
+  raw.forEach(ds=>{const wk=weekKeySat(ds); if(!seen.has(wk)){seen.add(wk); forgiven.add(ds);}}); // أول يوم فايت في الأسبوع
+  return forgiven;
+}
+function teacherMissInfo(teacherId){
+  const raw=missedDaysForTeacher(teacherId).length;
+  const forgiven=forgivenDaysForTeacher(teacherId).size;
+  return {raw, forgiven, counted:Math.max(0,raw-forgiven)};
 }
 // أيام نزل فيها فعلاً نشر للمدرّس (من السجل، الشهر الحالي)
 function publishedDays(teacherId){
@@ -641,19 +654,24 @@ function memberPosts(memberId){
   const ms=ymd(monthStart());
   return PUBLOG.filter(l=>l.member_id===memberId && l.pub_date>=ms).length;
 }
-// إجمالي الأيام الفايتة عبر كل مدرّسين العضو
+// إجمالي الأيام الفايتة المحتسبة (بعد سماح يوم/أسبوع) عبر كل مدرّسين العضو
 function memberMissed(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+missedDaysForTeacher(t.id).length,0);
+  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id).counted,0);
+}
+function memberForgiven(memberId){
+  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id).forgiven,0);
 }
 function memberTeacherBreakdown(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:missedDaysForTeacher(t.id).length}));
+  return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
 }
 // نقطة تقييم العضو (الشهر) — ميعاد40 إنتاجية30 جودة20 خصم10
 function memberScore(memberId){
   const ms=ymd(monthStart());
   const cards=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post');
   const published=cards.filter(c=>c.status==='published');
-  const expectedTotal=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
+  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
+  const forgiven=memberForgiven(memberId);
+  const expectedTotal=Math.max(0,expectedRaw-forgiven); // أيام الإجازة المسموح بيها متطلعش من المطلوب
   const posts=memberPosts(memberId);
   const missed=memberMissed(memberId);
   // عضو جديد / لسه مفيش بيانات كافية
@@ -1023,11 +1041,10 @@ function teachersPage(){
 }
 function teacherCardHTML(t){
   const owner=U(t.owner_id), lead=U(owner.lead_id);
-  const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
-  const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
+  const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted;
   return `<div class="member" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
     <div class="top">${avaT(t.id,40)}
-      <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'} · راحة ${restName}</div></div>
+      <div><div class="name">${t.name}</div><div class="role">${t.subject||'—'}</div></div>
       <span style="margin-inline-start:auto;color:var(--faint);font-size:18px">‹</span></div>
     <div class="kpi-row"><div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
       <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div></div>
@@ -1128,11 +1145,10 @@ function teachersTracking(){
   const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   if(ts.length===0) return `<div class="empty"><div class="big">📅</div>مفيش مدرّسين لسه.</div>`;
   return `<div class="grid3">${ts.map(t=>{
-    const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length, owner=U(t.owner_id);
-    const restName=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][t.rest_day==null?5:t.rest_day];
+    const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted, owner=U(t.owner_id);
     return `<div class="member">
       <div class="top">${avaT(t.id,38)}
-        <div><div class="name">${t.name}</div><div class="role">المسؤول: ${owner.name} · راحة: ${restName}</div></div></div>
+        <div><div class="name">${t.name}</div><div class="role">المسؤول: ${owner.name}</div></div></div>
       <div class="kpi-row">
         <div class="kpi"><div class="n">${posts}</div><div class="l">بوست الشهر</div></div>
         <div class="kpi"><div class="n" style="color:${missed?'var(--danger)':'var(--ready)'}">${missed}</div><div class="l">يوم فايت</div></div>
@@ -1142,11 +1158,11 @@ function teachersTracking(){
   }).join('')}</div>`;
 }
 function miniCalendar(t){
-  const rest=(t.rest_day==null?5:t.rest_day);
   const done=publishedDays(t.id);
+  const forgiven=forgivenDaysForTeacher(t.id);
   const today=new Date(); today.setHours(0,0,0,0);
   const ms=monthStart();
-  const canBackdate = ME.role!=='member'; // التيم ليدر/الأكونت مانجر/الأدمن يقدروا يسجّلوا نشر فايت
+  const canBackdate = ME.role==='admin'; // الأدمن بس يقدر يسجّل نشر فايت (تصحيح) — عشان محدش يأرّخ بوست على يوم فات
   const assigned = t.assigned_at ? new Date(t.assigned_at+'T00:00:00') : null;
   const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
   let cells=dayLabels.map(l=>`<div class="d" style="background:none;color:var(--faint)">${l}</div>`).join('');
@@ -1154,18 +1170,19 @@ function miniCalendar(t){
   let d=new Date(ms); const monthIdx=ms.getMonth();
   while(d.getMonth()===monthIdx){
     const ds=ymd(d); const num=d.getDate();
-    let cls, click='';
+    let cls, click='', title='';
     if(d>=today) cls='future';
-    else if(assigned && d<assigned) cls='future'; // قبل ما المدرّس يتسند — مش محسوب
-    else if(d.getDay()===rest) cls='rest';
+    else if(assigned && d<assigned) cls='future';
     else if(done.has(ds)) cls='ok';
+    else if(forgiven.has(ds)){ cls='rest'; title='title="إجازة الأسبوع (مش محتسبة)"'; } // أول يوم فايت في الأسبوع = إجازة مسموحة
     else { cls='miss'; if(canBackdate){ click=`onclick="recordBackdate('${t.id}','${ds}')" style="cursor:pointer" title="سجّل نشر في اليوم ده"`; } }
-    cells+=`<div class="d ${cls}" ${click}>${num}</div>`;
+    cells+=`<div class="d ${cls}" ${click} ${title}>${num}</div>`;
     d=new Date(d); d.setDate(d.getDate()+1);
   }
-  return `<div class="cal">${cells}</div>${canBackdate?'<div style="font-size:10.5px;color:var(--faint);margin-top:6px">دوس على يوم أحمر تسجّل فيه نشر فايت</div>':''}`;
+  return `<div class="cal">${cells}</div><div style="font-size:10.5px;color:var(--faint);margin-top:6px">🟢 نزل · 🔴 فات · ⚪ إجازة الأسبوع (أول يوم فايت بيتسامح)${canBackdate?' · دوس على يوم أحمر تسجّل فيه نشر':''}</div>`;
 }
 window.recordBackdate=async function(tid,date){
+  if(ME.role!=='admin'){toast('تسجيل نشر في يوم فات للأدمن بس',true);return;}
   const t=T(tid);
   if(!confirm(`تسجّل إن «${t.name}» نزل بوست يوم ${date}؟`))return;
   const {error}=await sb.from('publish_log').insert({card_id:null,teacher_id:tid,member_id:t.owner_id,pub_date:date});
@@ -1317,9 +1334,6 @@ window.openTeacher=function(tid){
     <div class="field"><label>المسؤول عنه</label><select id="t_owner">
       ${owners.map(o=>`<option value="${o.id}" ${t&&t.owner_id===o.id?'selected':(!t&&o.id===ME.id?'selected':'')}>${o.name} · ${roleLabel(o.role)}</option>`).join('')}
     </select></div>
-    <div class="field"><label>يوم الراحة (مايتحاسبش عليه)</label><select id="t_rest">
-      ${['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'].map((d,i)=>`<option value="${i}" ${(t?(t.rest_day==null?5:t.rest_day):5)===i?'selected':''}>${d}</option>`).join('')}
-    </select></div>
     <div class="field"><label>صورة المدرّس (اختياري)</label>
       <div style="display:flex;align-items:center;gap:12px">
         <span id="t_avaPrev">${t?avaT(t.id,48):avaTag('new','?',48,null)}</span>
@@ -1330,7 +1344,7 @@ window.openTeacher=function(tid){
   document.getElementById('mFoot').innerHTML=acts;
   document.getElementById('t_save').onclick=async()=>{
     const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
-    const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner'),rest_day:+val('t_rest')};
+    const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner')};
     const pf=document.getElementById('t_photo').files[0];
     if(pf){toast('بترفع الصورة…');const url=await uploadAvatar(pf,'teacher-'+(t?t.id:Date.now()));if(url)data.avatar_url=url;}
     let error;
