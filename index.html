@@ -398,6 +398,8 @@ const CATS=['كوميك','ريلز','ديزاين','كاروسيل','برومو'
 const REEL_TYPES=[{id:'youtube',name:'يوتيوب'},{id:'hall',name:'قاعة'},{id:'studio',name:'استوديو'}];
 const TASK_TYPES=['طلب ديزاين','طلب فيديو','خطة','مراجعة','تصوير','أخرى'];
 const PRIORITIES=[{id:'urgent',name:'مستعجل',ico:'🔴',rank:0},{id:'important',name:'مهم',ico:'🟠',rank:1},{id:'normal',name:'عادي',ico:'⚪',rank:2}];
+const QUALITY=[{v:1,name:'سيء'},{v:2,name:'عادي'},{v:3,name:'كويس'},{v:4,name:'ممتاز'}];
+function qualityName(v){const q=QUALITY.find(x=>x.v===v);return q?q.name:'';}
 const EFFORTS=[{m:5,name:'٥ دقايق'},{m:15,name:'ربع ساعة'},{m:30,name:'نص ساعة'},{m:60,name:'ساعة'},{m:120,name:'ساعتين'},{m:240,name:'أكتر من كده'}];
 function prio(id){return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2];}
 function effortName(m){const e=EFFORTS.find(x=>x.m===m);return e?e.name:'';}
@@ -513,7 +515,7 @@ async function enterApp(){
   }
   await reload();
   // حساب قيد المراجعة (مش متوافق عليه لسه) — الأدمن دايمًا متوافق عليه
-  if(ME.role!=='admin' && ME.approved===false){
+  if(ME.role!=='admin' && ME.approved!==true){
     window.__suspended=true;
     await sb.auth.signOut();
     hide('authScreen'); hide('app');
@@ -667,31 +669,43 @@ function memberForgiven(memberId){
 function memberTeacherBreakdown(memberId){
   return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
 }
-// نقطة تقييم العضو (الشهر) — ميعاد40 إنتاجية30 جودة20 خصم10
+// متوسط جودة شغل العضو الشهر ده (من تقييم القائد) — 0..1 أو null لو مفيش تقييمات
+function memberQuality(memberId){
+  const rated=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post' && c.quality && (c.created_at||'').slice(0,7)===ymNow());
+  if(!rated.length) return null;
+  const avg=rated.reduce((s,c)=>s+c.quality,0)/rated.length;
+  return (avg-1)/3; // سيء(1)=0 .. ممتاز(4)=1
+}
+// نتيجة التقارير: نسبة مدرّسينه (اللي كانوا متسندين الشهر اللي فات) اللي اتسجّلهم تقرير — 0..1 أو null
+function memberResultsScore(memberId){
+  const lastYm=shiftYm(ymNow(),-1);
+  const thisStart=ymd(monthStart());
+  // المدرّس يتحسب بس لو كان متسند قبل بداية الشهر الحالي (يعني الشهر اللي فات كان مسؤول عنه)
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId && (!t.assigned_at || t.assigned_at < thisStart));
+  if(!ts.length) return null; // موظف/مدرّسين جداد — مفيش تقرير متوقّع، مايتحسبش
+  return ts.filter(t=>getReport(t.id,lastYm)).length / ts.length;
+}
+// نقطة تقييم العضو: جودة 50٪ + النزول 30٪ + التقرير 20٪ (لو حاجة ناقصة بنعيد توزيع وزنها)
 function memberScore(memberId){
-  const ms=ymd(monthStart());
-  const cards=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post');
-  const published=cards.filter(c=>c.status==='published');
   const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
   const forgiven=memberForgiven(memberId);
-  const expectedTotal=Math.max(0,expectedRaw-forgiven); // أيام الإجازة المسموح بيها متطلعش من المطلوب
+  const expectedTotal=Math.max(0,expectedRaw-forgiven);
   const posts=memberPosts(memberId);
   const missed=memberMissed(memberId);
-  // عضو جديد / لسه مفيش بيانات كافية
-  if(expectedTotal<3 && posts<3) return {score:null, posts, missed, onTimeRate:null, returns:0};
-  // الميعاد: نسبة أيام النشر المنفّذة من المطلوبة
-  const onTimeRate = expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : 1;
-  // الإنتاجية: بوستات منفّذة مقارنة بالمتوقّع (سقف 100%)
-  const productivity = expectedTotal? Math.min(1, posts/expectedTotal) : (posts>0?1:0);
-  // الجودة: نسبة اللي عدّى من غير ما يترجّع (نحسب الرجوعات من التعليقات اللي فيها ↩)
-  const returns = COMMENTS.filter(cm=>cm.text&&cm.text.startsWith('↩') && cards.some(c=>c.id===cm.card_id)).length;
-  const handled = published.length + returns;
-  const quality = handled? Math.max(0,(published.length)/handled) : 1;
-  // خصم المتأخرات: كل متأخر بيخصم
-  const lateCount = cards.filter(isLate).length;
-  const penalty = Math.min(1, lateCount*0.1);
-  const score = Math.round((onTimeRate*40 + productivity*30 + quality*20 + (1-penalty)*10));
-  return {score, posts, missed, onTimeRate:Math.round(onTimeRate*100), returns, productivity:Math.round(productivity*100)};
+  const qScore=memberQuality(memberId);                                  // جودة (قائد)
+  const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; // النزول
+  const rScore=memberResultsScore(memberId);                            // التقرير
+  // عضو جديد لسه مفيش أي بيانات
+  if(qScore===null && pScore===null && rScore===null && posts<1)
+    return {score:null, posts, missed, qualityPct:null, postingPct:null, resultsPct:null};
+  // إعادة توزيع الأوزان على الموجود بس
+  const parts=[]; if(qScore!==null)parts.push([qScore,.5]); if(pScore!==null)parts.push([pScore,.3]); if(rScore!==null)parts.push([rScore,.2]);
+  const totW=parts.reduce((s,p)=>s+p[1],0)||1;
+  const score=Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/totW*100);
+  return {score, posts, missed,
+    qualityPct: qScore===null?null:Math.round(qScore*100),
+    postingPct: pScore===null?null:Math.round(pScore*100),
+    resultsPct: rScore===null?null:Math.round(rScore*100)};
 }
 // تسجيل نشر في السجل (مرة واحدة لكل كارت في اليوم)
 async function recordPublish(card){
@@ -714,6 +728,42 @@ function descendantIds(){
     frontier=next;
   }
   return [...out];
+}
+// أبناء أي شخص (مش أنا بس)
+function descendantsOf(personId){
+  const out=new Set(); let frontier=[personId];
+  while(frontier.length){
+    const next=[];
+    PROFILES.forEach(p=>{ if(p.lead_id && frontier.includes(p.lead_id) && !out.has(p.id)){ out.add(p.id); next.push(p.id);} });
+    frontier=next;
+  }
+  return [...out];
+}
+// متوسط نقط المسؤولين المباشرين تحت شخص (الليدر→أعضاؤه، المانجر→التيم ليدرز اللي تحته)
+function teamAvgScore(personId){
+  const kids=PROFILES.filter(p=>p.lead_id===personId && p.active!==false);
+  const scores=kids.map(k=>scoreFor(k.id).score).filter(s=>s!==null);
+  if(!scores.length) return null;
+  return Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
+}
+// نقطة أي شخص حسب دوره: عضو=شغله / ليدر=شغله50+فريقه50 / مانجر=فريقه100
+function scoreFor(personId){
+  const u=U(personId);
+  if(u.role==='member') return memberScore(personId);
+  if(u.role==='lead'){
+    const own=memberScore(personId).score, team=teamAvgScore(personId);
+    let score;
+    if(own!==null && team!==null) score=Math.round(own*0.5+team*0.5);
+    else if(own!==null) score=own;
+    else if(team!==null) score=team;
+    else score=null;
+    return {score, own, team, role:'lead'};
+  }
+  if(u.role==='manager'){
+    const team=teamAvgScore(personId);
+    return {score:team, own:null, team, role:'manager'};
+  }
+  return {score:null};
 }
 function myMembers(){ // member ids visible to me (للتقييم والليدر بورد) — بدون الموقوفين
   if(ME.role==='admin')return PROFILES.filter(p=>p.role==='member'&&p.active!==false).map(p=>p.id);
@@ -833,6 +883,12 @@ function dueChip(c){
   return `<span class="due ${late?'late':''}">${late?'⚠':'◔'} ${dueLabel(c.due)}</span>`;
 }
 function prioBadge(c){const p=prio(c.priority);if(p.id==='normal')return'';return `<span class="tag plat" title="${p.name}">${p.ico} ${p.name}</span>`;}
+function qualityBadge(c){
+  if(!c.quality) return '';
+  const col={1:'var(--danger)',2:'var(--muted)',3:'var(--doing)',4:'var(--ready)'}[c.quality];
+  const ico={1:'▽',2:'•',3:'△',4:'★'}[c.quality];
+  return `<span class="tag plat" style="color:${col};border-color:${col}" title="تقييم القائد">${ico} ${qualityName(c.quality)}</span>`;
+}
 function cardHTML(c){
   const a=U(c.assignee_id),nc=COMMENTS.filter(x=>x.card_id===c.id).length, ico=cardIcon(c);
   if((c.kind||'post')==='task'){
@@ -846,7 +902,7 @@ function cardHTML(c){
   const t=T(c.teacher_id);
   return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill">${ico} ${t.name}</div>
     <div class="ttl">${esc(c.title)}</div><div class="meta"><span class="tag cat">${c.category||'—'}${c.subtype?' · '+(REEL_TYPES.find(r=>r.id===c.subtype)?.name||''):''}</span>
-    ${prioBadge(c)}${c.post_link?`<span class="tag plat">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
+    ${prioBadge(c)}${qualityBadge(c)}${c.post_link?`<span class="tag plat">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
     <div class="foot">${avaP(a.id)}<span class="who">${a.name}</span>${dueChip(c)}</div></div>`;}
 function wireBoard(){
   document.querySelectorAll('.card').forEach(el=>{
@@ -1115,45 +1171,139 @@ function lateView(){
 /* ---------- التقييم والترتيب + متابعة النشر ---------- */
 let rankTab='members', rankBy='score';
 function memberResults(id,ym){let f=0,v=0,e=0;TEACHERS.filter(t=>t.owner_id===id).forEach(t=>{const r=getReport(t.id,ym);if(r){f+=r.new_followers||0;v+=+r.views||0;e+=+r.engagement||0;}});return {f,v,e};}
+function rankGroup(role){
+  let rows=PROFILES.filter(p=>p.role===role&&p.active!==false).map(p=>({id:p.id,...scoreFor(p.id)}));
+  rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
+  rows.forEach((r,i)=>r._pos=i+1);
+  return rows;
+}
+const ROLE_GROUPS=[['member','🧑‍💻 الأعضاء'],['lead','🎖 التيم ليدرز'],['manager','📊 الأكونت مانجرز']];
+function myScoreCard(){
+  const rows=rankGroup(ME.role); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
+  const sc=me.score, col=sc===null?'var(--faint)':scoreColor(sc);
+  let breakdown='';
+  if(ME.role==='member'){
+    breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
+      ${me.qualityPct!=null?`<span>💡 جودة ${me.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمتش</span>'}
+      ${me.postingPct!=null?`<span>🗓 نزول ${me.postingPct}٪</span>`:''}
+      ${me.resultsPct!=null?`<span>📈 تقارير ${me.resultsPct}٪</span>`:''}</div>`;
+  } else {
+    breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
+      ${me.own!=null?`<span>👤 شغلك ${me.own}</span>`:''}
+      ${me.team!=null?`<span>👥 فريقك ${me.team}</span>`:'<span style="color:var(--faint)">👥 فريقك لسه</span>'}</div>`;
+  }
+  const groupName={member:'الأعضاء',lead:'التيم ليدرز',manager:'الأكونت مانجرز'}[ME.role]||'';
+  const tier=scoreTier(sc);
+  return `<div class="lt-empty" style="text-align:center;margin-bottom:18px;padding:18px">
+    <div style="font-size:13px;color:var(--muted)">تقييمك الشهر ده</div>
+    <div style="display:inline-flex;align-items:center;gap:6px;background:${tier.color}22;color:${tier.color};font-weight:800;font-size:14px;padding:5px 14px;border-radius:20px;margin:8px 0 2px">${tier.ico} ${tier.name}</div>
+    <div style="font-size:44px;font-weight:900;color:${col};line-height:1.1;margin:2px 0">${sc===null?'—':sc}</div>
+    <div style="font-size:13px;color:var(--muted)">${sc===null?'لسه بتتقيّم':'من ١٠٠'} · ترتيبك <b style="color:var(--brand)">${me._pos}</b> من ${rows.length} في ${groupName}</div>
+    ${breakdown}</div>`;
+}
 function rankView(){
   const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
+  const isMember=ME.role==='member';
   const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
-    <div class="page-sub">شغل شهر ${monthName} · ميعاد ٤٠٪ + إنتاجية ٣٠٪ + جودة ٢٠٪ + التزام ١٠٪</div></div></div>
-    <div class="seg-tabs">
+    <div class="page-sub">شغل شهر ${monthName} · جودة ٥٠٪ + النزول ٣٠٪ + التقرير ٢٠٪ <span style="color:var(--brand)">· نسخة 3</span></div></div></div>
+    ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard():''}
+    ${!isMember?`<div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
+      <button class="${rankTab==='teams'?'on':''}" onclick="rankTab='teams';render()">🏆 ترتيب التيمات</button>
       <button class="${rankTab==='teachers'?'on':''}" onclick="rankTab='teachers';render()">متابعة المدرّسين</button>
-    </div>
-    ${rankTab==='members'?`<div class="filters" style="margin-bottom:14px"><button class="chip ${rankBy==='score'?'on':''}" onclick="rankBy='score';render()">رتّب بالأداء</button><button class="chip ${rankBy==='results'?'on':''}" onclick="rankBy='results';render()">رتّب بالنتائج 📈</button></div>`:''}`;
-  return head + (rankTab==='members'? membersRank() : teachersTracking());
+    </div>`:'<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">ترتيب الأعضاء</div>'}`;
+  if(isMember) return head + membersRank();
+  return head + (rankTab==='members'? membersRank() : rankTab==='teams'? teamsRank() : teachersTracking());
+}
+function rankSubLine(r){
+  const u=U(r.id);
+  if(u.role==='member'){
+    return `<div class="sub">
+      ${r.qualityPct!=null?`<span>💡 جودة ${r.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمش</span>'}
+      ${r.postingPct!=null?`<span>🗓 نزول ${r.postingPct}٪</span>`:''}
+      ${r.resultsPct!=null?`<span>📈 تقارير ${r.resultsPct}٪</span>`:''}
+    </div>`;
+  }
+  // قائد
+  return `<div class="sub">
+    <span style="color:var(--brand)">${u.role==='manager'?'أكونت مانجر':'تيم ليدر'}</span>
+    ${r.own!=null?`<span>👤 شغله ${r.own}</span>`:''}
+    ${r.team!=null?`<span>👥 فريقه ${r.team}</span>`:'<span style="color:var(--faint)">👥 فريقه لسه</span>'}
+  </div>`;
+}
+function rankRowHTML(r,pos){
+  const u=U(r.id), isNew=r.score===null, medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'', isMe=r.id===ME.id;
+  const tier=scoreTier(r.score);
+  return `<div class="rank-row ${pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}">
+    <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
+    ${avaP(r.id,38)}
+    <div class="rank-main"><div class="nm">${u.name}${isMe?' (إنت)':''}</div>${rankSubLine(r)}</div>
+    <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'لسه':tier.ico+' '+tier.name}</div></div>
+  </div>`;
 }
 function membersRank(){
-  const ids=myMembers();
-  if(ids.length===0) return `<div class="empty"><div class="big">★</div>لسه مفيش أعضاء بشغل. أول ما يبدأوا ينزّلوا محتوى هيظهر ترتيبهم هنا.</div>`;
-  const ym=ymNow();
-  let rows=ids.map(id=>({id,...memberScore(id),res:memberResults(id,ym)}));
-  if(rankBy==='results') rows.sort((a,b)=>(b.res.f+b.res.v/100+b.res.e/100)-(a.res.f+a.res.v/100+a.res.e/100));
-  else rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
-  let pos=0;
-  return rows.map(r=>{
-    const u=U(r.id); pos++;
-    const isNew=r.score===null;
-    const medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'';
-    const hasRes=r.res.f||r.res.v||r.res.e;
+  // العضو: مجموعته بس (الأوائل + ترتيبه)
+  if(ME.role==='member'){
+    const rows=rankGroup('member');
+    if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش أعضاء.</div>`;
+    const me=rows.find(r=>r.id===ME.id), top3=rows.slice(0,3);
+    let html=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">🏆 الأوائل</div>`;
+    html+=top3.map(r=>rankRowHTML(r,r._pos)).join('');
+    if(me && me._pos>3){
+      html+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13px;font-weight:800">ترتيبك إنت</div>`+rankRowHTML(me,me._pos);
+    }
+    html+=`<div class="lt-empty" style="margin-top:14px;font-size:12.5px;text-align:center">إنت رقم ${me?me._pos:'—'} من ${rows.length} في الأعضاء 💪</div>`;
+    return html;
+  }
+  // التيم ليدر: مجموعة التيم ليدرز بالأسماء + فريقه هو (أعضاؤه)
+  if(ME.role==='lead'){
+    let out='';
+    const leads=rankGroup('lead');
+    out+=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🎖 التيم ليدرز <span style="color:var(--faint)">(${leads.length})</span></div>`;
+    out+=leads.map(r=>rankRowHTML(r,r._pos)).join('');
+    const myMems=rankGroup('member').filter(r=>U(r.id).lead_id===ME.id);
+    out+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13.5px;font-weight:800">👥 فريقك</div>`;
+    out+= myMems.length? myMems.map(r=>rankRowHTML(r,r._pos)).join('') : `<div class="lt-empty">لسه مفيش أعضاء في فريقك.</div>`;
+    return out;
+  }
+  // الأكونت مانجر والأدمن: كل الناس (٣ مجموعات)
+  let out='';
+  ROLE_GROUPS.forEach(([role,label])=>{
+    const rows=rankGroup(role);
+    if(!rows.length)return;
+    out+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13.5px;font-weight:800">${label} <span style="color:var(--faint)">(${rows.length})</span></div>`;
+    out+=rows.map(r=>rankRowHTML(r,r._pos)).join('');
+  });
+  return out || `<div class="empty"><div class="big">★</div>لسه مفيش موظفين بشغل.</div>`;
+}
+// ترتيب التيمات: كل تيم ليدر + أعضاؤه = تيم
+function teamsRank(){
+  const leads=PROFILES.filter(p=>p.role==='lead'&&p.active!==false);
+  if(!leads.length) return `<div class="empty"><div class="big">🏆</div>لسه مفيش تيمات. لما تحدّد تيم ليدرز وأعضاء، هتظهر ترتيبات التيمات هنا.</div>`;
+  let rows=leads.map(l=>{
+    const memberCount=PROFILES.filter(p=>p.lead_id===l.id&&p.role==='member'&&p.active!==false).length;
+    return {id:l.id, name:l.name, score:scoreFor(l.id).score, memberCount};
+  });
+  rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
+  return rows.map((r,i)=>{
+    const pos=i+1, isNew=r.score===null, medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'', tier=scoreTier(r.score), mine=U(r.id).lead_id===ME.id||r.id===ME.id;
     return `<div class="rank-row ${pos<=3&&!isNew?'top':''}">
       <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
       ${avaP(r.id,38)}
-      <div class="rank-main"><div class="nm">${u.name}</div>
-        <div class="sub">
-          <span>📤 ${r.posts} بوست</span>
-          <span style="color:${r.missed?'var(--danger)':'inherit'}">${r.missed?'⚠ فوّت '+r.missed+' يوم':'✓ ملتزم'}</span>
-          ${r.onTimeRate!=null?`<span>⏱ التزام ${r.onTimeRate}٪</span>`:''}
-          ${hasRes?`<span style="color:var(--brand)">📈 +${fmtNum(r.res.f)} متابع · ${fmtNum(r.res.v)} مشاهدة · ${fmtNum(r.res.e)} تفاعل</span>`:''}
-        </div></div>
-      <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l">${isNew?'لسه بيتقيّم':'من ١٠٠'}</div></div>
+      <div class="rank-main"><div class="nm">تيم ${r.name}${mine?' (تيمك)':''}</div>
+        <div class="sub"><span>👤 القائد: ${r.name}</span><span>👥 ${r.memberCount} عضو</span></div></div>
+      <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'لسه':tier.ico+' '+tier.name}</div></div>
     </div>`;
   }).join('');
 }
 function scoreColor(s){return s>=80?'var(--ready)':s>=55?'var(--doing)':'var(--danger)';}
+function scoreTier(s){
+  if(s===null||s===undefined) return {name:'لسه بيتقيّم', color:'var(--faint)', ico:'⏳'};
+  if(s>=85) return {name:'ممتاز', color:'var(--ready)', ico:'⭐'};
+  if(s>=70) return {name:'كويس جدًا', color:'#3B82C4', ico:'💪'};
+  if(s>=50) return {name:'كويس', color:'var(--doing)', ico:'👍'};
+  return {name:'محتاج تحسين', color:'var(--danger)', ico:'📈'};
+}
 function teachersTracking(){
   const ids=scopeIds();
   const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
@@ -1520,7 +1670,7 @@ function reportsView(){
 function canEditReport(t){return ME.role==='admin'||t.owner_id===ME.id||descendantIds().includes(t.owner_id);}
 
 /* ---------- طلبات التسجيل (الأدمن) ---------- */
-function pendingUsers(){return PROFILES.filter(p=>p.approved===false && p.role!=='admin' && p.active!==false);}
+function pendingUsers(){return PROFILES.filter(p=>p.approved!==true && p.role!=='admin' && p.active!==false);}
 function signupsView(){
   if(ME.role!=='admin') return `<div class="empty"><div class="big">🔒</div>الصفحة دي للأدمن بس.</div>`;
   const list=pendingUsers();
@@ -1634,7 +1784,7 @@ const GUIDE=[
   {ico:'📅', title:'الأجندة', text:'شغلك مرتّب بالأيام (النهارده، بكرة، الأسبوع ده). والأهم: مرتّبة بالأولوية — المستعجل الأول، وجوه كل مجموعة اللي وقته أطول يظهر فوق. كل يوم افتحها تعرف تعمل إيه.', roles:['member','lead','manager','admin']},
   {ico:'👥', title:'شغل الفريق', text:'في الأجندة فيه تاب «شغل الفريق» تشوف فيه شغل كل اللي تحتك في مكان واحد.', roles:['lead','manager','admin']},
   {ico:'🎓', title:'المدرّسين', text:'كل مدرّس وخطته. دوس على أي مدرّس تشوف بورده وحده، وتقدر تغيّر صورته ولينكاته ويوم راحته.', roles:['member','lead','manager','admin']},
-  {ico:'⭐', title:'التقييم والترتيب', text:'ترتيب الموظفين بدرجة من ١٠٠ (التزام + إنتاجية + جودة + ميعاد)، وجنبها «النتائج» (متابعين/مشاهدات/تفاعل) من التقارير. وفيه متابعة لكل مدرّس بالأيام.', roles:['lead','manager','admin']},
+  {ico:'⭐', title:'التقييم والترتيب', text:'كل موظف بياخد درجة من ١٠٠: جودة شغله (تقييم القائد) ٥٠٪ + انتظامه في النزول ٣٠٪ + تقارير مدرّسينه ٢٠٪. وفيه ترتيب للشركة كلها.', roles:['member','lead','manager','admin']},
   {ico:'📊', title:'التقارير الشهرية', text:'كل شهر تدخّل إحصائيات فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات (لينك أو صورة). السايت بيجمعها مع شغلك في تقرير واحد.', roles:['lead','manager','admin']},
   {ico:'⚙️', title:'إدارة الفريق', text:'تضيف موظفين، تحدّد أدوارهم، توقفهم، وتوزّع المدرّسين على الموظفين.', roles:['manager','admin']},
   {ico:'🔔', title:'الإشعارات', text:'الجرس فوق بيوصّلك أي حاجة مهمة: تاسك اتطلبت منك، بوست اترجع بملاحظة، أو تذكير المراجعة الأسبوعية.', roles:['member','lead','manager','admin']},
@@ -1668,6 +1818,7 @@ window.openGuide=function(opts){
   };
   if(isWelcome) document.getElementById('g_skip').onclick=async()=>{closeModal();await finishWelcome();};
   document.getElementById('overlay').classList.add('show');
+  if(isWelcome) finishWelcome(); // سجّل إنه شاف الترحيب فورًا — مهما قفل النافذة إزاي مايرجعش
 };
 async function checkWelcome(){
   if(ME.seen_role===ME.role)return;
@@ -1679,14 +1830,14 @@ async function checkWelcome(){
 /* كل ما تعمل تحديث مهم: زوّد رقم v واحد، واكتب الجديد في items.
    هتظهر لكل الناس مرة واحدة بس، وبعد ما يقفلوها مش هتتكرر. */
 const LATEST_UPDATE={
-  v:1,
+  v:2,
   title:'جديد في السايت 🎉',
   items:[
-    '📊 التقارير الشهرية: دلوقتي تقدر تسجّل إحصائيات فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات.',
-    '🗓 نظام الإجازة المرنة: أول يوم فايت في الأسبوع بيتسامح تلقائيًا، والباقي بيتحسب.',
-    '🧭 جولة تعريفية ودليل استخدام مفصّل — تلاقيه في «❓ الدليل».',
-    '✅ نظام الموافقة على التسجيل: أي حساب جديد بيستنى موافقة الأدمن.',
-    '⚡ تحسينات في السرعة + نسخة احتياطية للبيانات.',
+    '⭐ نظام تقييم جديد وأعدل: جودة شغلك (تقييم القائد) ٥٠٪ + انتظامك في النزول ٣٠٪ + التقارير ٢٠٪.',
+    '🏆 ترتيب الشركة: كل واحد يشوف تقييمه وترتيبه بين زمايله.',
+    '👤 البورد بقى مفصول: «شغلي» و«شغل التيم» للقادة.',
+    '📊 التقارير الشهرية + 🗓 نظام الإجازة المرنة (أول يوم فايت في الأسبوع بيتسامح).',
+    '⚡ تحسينات في السرعة والأمان + نسخة احتياطية.',
   ],
 };
 function checkUpdate(){
@@ -1776,14 +1927,12 @@ function guideExtra(){
 
   // التقييم بالبلدي
   let scoring='';
-  if(isLeader){
-    scoring = sec('⭐ التقييم بيتحسب إزاي (بالبلدي)')
-      + step('<b>الميعاد ٤٠٪:</b> نسبة البوستات اللي نزلت في ميعادها من غير تأخير.')
-      + step('<b>الإنتاجية ٣٠٪:</b> كمية البوستات اللي نزلت فعلاً الشهر ده.')
-      + step('<b>الجودة ٢٠٪:</b> البوستات اللي عدّت المراجعة من غير ما ترجع كتير.')
-      + step('<b>الالتزام ١٠٪:</b> إنه ما يفوّتش أيام النشر بتاعة مدرّسينه.')
-      + step('<b>ملاحظة مهمة:</b> أرقام التقارير (متابعين/مشاهدات) <u>مش</u> بتأثّر على الدرجة الآلية — بتظهر جنبها كـ «نتائج» عشان تقيّم بعينك من غير ما نظلم حد.');
-  }
+  scoring = sec('⭐ التقييم بيتحسب إزاي (بالبلدي)')
+      + step('<b>جودة الشغل ٥٠٪:</b> تقييم القائد لأفكارك وشغلك (سيء/عادي/كويس/ممتاز) على كل بوست — وده أهم حاجة.')
+      + step('<b>الانتظام في النزول ٣٠٪:</b> إنك بتنزّل لمدرّسينك بانتظام (أول يوم فايت في الأسبوع بيتسامح).')
+      + step('<b>التقارير ٢٠٪:</b> إنك بتسجّل تقارير مدرّسينك عن الشهر اللي فات.')
+      + step('<b>عادل:</b> لو القائد ماقيّمش جودتك، الجزء ده مابيتحسبش عليك — درجتك بتتوزّع على الباقي. ومحدش بياخد صفر بالغلط.')
+      + (isLeader?step('<b>للقادة:</b> التيم ليدر = نص درجته شغله + نص أداء فريقه. الأكونت مانجر = أداء فريقه.'):'' );
 
   // نصايح
   let tips = sec('💡 نصايح')
@@ -1809,7 +1958,7 @@ function tourSteps(){
     {sel:'#addBtn', title:'تضيف شغل', text:'تضيف بوست، أو تبدّل لـ «تاسك» جوه النافذة. لكل كارت تحدّد المدرّس، التصنيف، الأولوية، والمدة المتوقّعة — ودول اللي بيرتّبوا أجندتك.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="agenda"]', title:'الأجندة — ابدأ يومك منها', text:'شغلك مرتّب: المستعجل الأول، وجوه كل يوم اللي وقته أطول فوق. افتحها كل صبح تعرف تبدأ بإيه بالظبط من غير تفكير.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="teachers"]', title:'المدرّسين', text:'كل مدرّس وخطته لوحده. دوس على أي مدرّس تشوف بورده مفلتر عليه، وتقدر تغيّر صورته ولينكاته ويوم راحته (اللي مش بيتحاسب عليه).', roles:['member','lead','manager','admin']},
-    {sel:'[data-view="rank"]', title:'التقييم والترتيب', text:'ترتيب فريقك بدرجة من ١٠٠ (التزام + إنتاجية + جودة + ميعاد). جنبها «النتائج» (متابعين/مشاهدات) من التقارير — ترتّب بالأداء أو بالنتائج.', roles:['lead','manager','admin']},
+    {sel:'[data-view="rank"]', title:'التقييم والترتيب', text:'درجتك من ١٠٠: جودة شغلك ٥٠٪ + انتظامك ٣٠٪ + تقاريرك ٢٠٪. تشوف ترتيبك في الشركة كمان.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="reports"]', title:'التقارير الشهرية', text:'كل شهر تسجّل أرقام فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات إجباري. السايت بيجمعها مع شغلك في صورة واحدة.', roles:['lead','manager','admin']},
     {sel:'#navManage', title:'إدارة الفريق', text:'تضيف موظفين، تحدّد أدوارهم، توقفهم، وتوزّع المدرّسين. أي حد بترقّيه بتتفتحله مميزات أكتر تلقائيًا.', roles:['manager','admin']},
     {sel:'#bellBtn', title:'الإشعارات', text:'بتوصّلك أول بأول: تاسك اتطلبت منك، بوست اترجّع بملاحظة، أو تذكير المراجعة للقادة. دوس على أي إشعار يوديك للكارت بتاعه.', roles:['member','lead','manager','admin']},
@@ -1942,7 +2091,9 @@ window.openCard=function(id,newKind){
       <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div>
       <div class="field"><label>لينك البوست (اختياري)</label><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
       <div class="field"><label>الكابشن (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="نص البوست…"></div>
-      <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>`;
+      <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
+      ${canApprove()?`<div class="field"><label>تقييم الفكرة/الشغل (بيدخل في تقييم الموظف)</label><div class="seg" id="f_quality">${QUALITY.map(q=>`<button data-q="${q.v}" class="${c&&c.quality===q.v?'on':''}">${q.name}</button>`).join('')}</div></div>`
+        : (c&&c.quality?`<div class="field"><label>تقييم القائد لشغلك</label><div class="lt-empty" style="margin:0">${qualityBadge(c)}</div></div>`:'')}`;
   }
 
   document.getElementById('mBody').innerHTML = kindToggle + fields +
@@ -1962,6 +2113,13 @@ window.openCard=function(id,newKind){
   let curPrio = c?prio(c.priority).id:'normal';
   if(!taskLocked) document.querySelectorAll('#f_prio button').forEach(b=>b.onclick=()=>{
     curPrio=b.dataset.p;document.querySelectorAll('#f_prio button').forEach(x=>x.classList.toggle('on',x===b));});
+
+  // تقييم الجودة (للقائد) — اختياري
+  let curQuality = c?(c.quality||null):null;
+  document.querySelectorAll('#f_quality button').forEach(b=>b.onclick=()=>{
+    const v=+b.dataset.q;
+    if(curQuality===v){curQuality=null;b.classList.remove('on');} // دوسة تانية تلغي
+    else{curQuality=v;document.querySelectorAll('#f_quality button').forEach(x=>x.classList.toggle('on',x===b));}});
 
   // المدرّسين المتعدّدين (للتاسك)
   let curTeachers = c?(c.teacher_ids||[]).slice():[];
@@ -2013,7 +2171,7 @@ window.openCard=function(id,newKind){
       data={title:t,kind:'post',teacher_id:val('f_teacher')||null,assignee_id:val('f_assignee'),category:val('f_cat'),
         subtype:val('f_cat')==='ريلز'?(val('f_subtype')||null):null,platform:val('f_plat'),
         priority:curPrio,effort:val('f_effort')?+val('f_effort'):null,due:val('f_due')||null,
-        post_link:normUrl(val('f_link'))||null,caption:val('f_caption')||null,status:cur};
+        post_link:normUrl(val('f_link'))||null,caption:val('f_caption')||null,status:cur,quality:curQuality};
     }
     let error;
     const wasPub = c && c.status==='published';
@@ -2026,7 +2184,7 @@ window.openCard=function(id,newKind){
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
   };
   if(!isTask && c&&canApprove()&&c.status==='review'){
-    document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready'}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
+    document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready',quality:curQuality}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
     document.getElementById('f_return').onclick=async()=>{const note=prompt('سبب الرجوع:');if(note===null)return;
       if(note.trim())await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:'↩ '+note.trim()});
       await sb.from('cards').update({status:'doing'}).eq('id',c.id);
