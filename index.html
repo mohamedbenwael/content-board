@@ -908,6 +908,28 @@ function render(){
   else if(view==='wreport')main.innerHTML=weeklyReportView();
   else if(view==='linktree')main.innerHTML=linkTreeView();
   if(view==='board')wireBoard();
+  syncHistory();
+}
+// ---- رجوع المتصفّح (السهم/زرار الموبايل) يرجّع جوه السايت ----
+let _lastNavKey=null, _popping=false, _popInit=false;
+function navSnapshot(){return {view,scopeTeacher,detailId,linkTeacher,boardKind};}
+function syncHistory(){
+  if(_popping) return;
+  const snap=navSnapshot(), key=JSON.stringify(snap);
+  if(key===_lastNavKey) return;
+  if(_lastNavKey===null) history.replaceState(snap,''); else history.pushState(snap,'');
+  _lastNavKey=key;
+  if(!_popInit){ _popInit=true;
+    window.addEventListener('popstate',e=>{
+      _popping=true;
+      const ov=document.getElementById('overlay'); if(ov) ov.classList.remove('show'); // اقفل أي نافذة مفتوحة
+      const s=e.state||{view:'board',scopeTeacher:null,detailId:null,linkTeacher:null,boardKind:'post'};
+      view=s.view; scopeTeacher=s.scopeTeacher??null; detailId=s.detailId??null; linkTeacher=s.linkTeacher??null; boardKind=s.boardKind||'post';
+      _lastNavKey=JSON.stringify(navSnapshot());
+      render();
+      _popping=false;
+    });
+  }
 }
 function renderTeacherNav(){ /* قايمة المدرّسين اتنقلت لخانة «المدرّسين» المستقلة */ }
 function statStrip(cs){
