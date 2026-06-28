@@ -1539,11 +1539,13 @@ function miniCalendar(t){
   let d=new Date(ms); const monthIdx=ms.getMonth();
   while(d.getMonth()===monthIdx){
     const ds=ymd(d); const num=d.getDate();
+    const isToday = ds===ymd(today);
     let cls, click='', title='';
-    if(d>=today) cls='future';
-    else if(assigned && d<assigned) cls='future';
-    else if(done.has(ds)) cls='ok';
-    else if(forgiven.has(ds)){ cls='rest'; title='title="إجازة الأسبوع (مش محتسبة)"'; } // أول يوم فايت في الأسبوع = إجازة مسموحة
+    if(done.has(ds)) cls='ok';                                  // نزل (حتى لو النهارده) = أخضر فورًا
+    else if(d>today) cls='future';                             // أيام جاية
+    else if(isToday) cls='future';                            // النهارده لسه ما عداش — محايد
+    else if(assigned && d<assigned) cls='future';             // قبل الإسناد
+    else if(forgiven.has(ds)){ cls='rest'; title='title="إجازة الأسبوع (مش محتسبة)"'; }
     else { cls='miss'; if(canBackdate){ click=`onclick="recordBackdate('${t.id}','${ds}')" style="cursor:pointer" title="سجّل نشر في اليوم ده"`; } }
     cells+=`<div class="d ${cls}" ${click} ${title}>${num}</div>`;
     d=new Date(d); d.setDate(d.getDate()+1);
