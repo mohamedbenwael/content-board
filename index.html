@@ -195,6 +195,26 @@
   .cal .d.rest{background:var(--raised2);color:var(--faint)}
   .cal .d.future{background:transparent;color:var(--faint)}
 
+  .plan-cal{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .pc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-size:14px}
+  .pc-leg{font-size:11.5px;color:var(--muted);font-weight:600}
+  .pcal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .pcal .pd{aspect-ratio:1;border-radius:8px;display:grid;place-items:center;font-size:13px;font-weight:700;position:relative;background:var(--raised2);color:var(--muted)}
+  .pcal .pd.lbl{background:transparent;color:var(--faint);font-size:11px}
+  .pcal .pd.ok{background:#DDF3E6;color:#1d8a52;cursor:pointer}
+  .pcal .pd.ok:hover{outline:2px solid #1d8a52}
+  .pcal .pd.fixable{cursor:pointer}
+  .pcal .pd.fixable:hover{outline:2px dashed var(--brand)}
+  .pcal .pd.miss{background:var(--danger-dim);color:var(--danger)}
+  .pcal .pd.rest{background:var(--raised2);color:var(--faint)}
+  .pcal .pd.fut{background:transparent;color:var(--faint)}
+  .pcal .pd.tdy{outline:2px solid var(--brand);outline-offset:-2px}
+  .pcal .pd .pdc{position:absolute;top:2px;left:3px;font-size:9px;background:#1d8a52;color:#fff;border-radius:8px;padding:0 4px}
+
+  .pubq{display:flex;gap:8px}
+  .pubq .pdq{flex:1;padding:12px 6px;border-radius:10px;border:1.5px solid var(--line);background:var(--raised2);font-weight:700;font-size:13px;cursor:pointer;color:var(--txt);line-height:1.3}
+  .pubq .pdq.on{border-color:var(--brand);background:var(--brand);color:#fff}
+
   .feed{max-width:780px}
   .empty{text-align:center;color:var(--muted);padding:60px 20px}
   .empty .big{font-size:40px;margin-bottom:12px;opacity:.5}
@@ -472,7 +492,12 @@ async function doAuth(){
       if(e2) throw e2;
       // نسجّل الدور المقترح + نخلّيه قيد المراجعة (الأدمن يوافق)
       const {data:{user}}=await sb.auth.getUser();
-      if(user) await sb.from('profiles').update({wanted_role:wanted, approved:false}).eq('id',user.id);
+      if(user){
+        await sb.from('profiles').update({wanted_role:wanted, approved:false}).eq('id',user.id);
+        // إشعار لكل الأدمنز إن فيه طلب تسجيل جديد
+        const {data:admins}=await sb.from('profiles').select('id').eq('role','admin');
+        if(admins) for(const a of admins){ await sb.from('notifications').insert({user_id:a.id,actor_id:user.id,type:'signup',text:`👤 ${name} عمل حساب جديد (${roleLabel(wanted)}) ومستني موافقتك.`}); }
+      }
     }else{
       const {error}=await sb.auth.signInWithPassword({email,password:pass});
       if(error) throw error;
@@ -534,6 +559,7 @@ async function enterApp(){
     return;
   }
   await checkWeeklyReview();
+  await checkPeriodicNotifs();
   hide('loading'); show('app');
   wireApp(); render();
   postLoadModals();
@@ -546,7 +572,7 @@ async function reload(){
   const small=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('teachers').select('*'),
-    sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
+    sb.from('notifications').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
     sb.from('app_settings').select('*').eq('key','announcement'),
     sb.from('teacher_reviews').select('*'),
@@ -691,9 +717,9 @@ function memberResultsScore(memberId){
   if(!ts.length) return null; // موظف/مدرّسين جداد — مفيش تقرير متوقّع، مايتحسبش
   return ts.filter(t=>getReport(t.id,lastYm)).length / ts.length;
 }
-// إدارة المدرّس: متوسط تقييمات القائد (سرعة الرد/الرضا/التواصل/التنفيذ) لمدرّسي العضو هذا الشهر — 0..1 أو null
+// إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
 function memberManageScore(memberId){
-  const ym=ymNow();
+  const ym=shiftYm(ymNow(),-1); // الشهر اللي فات
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
   const vals=[];
   ts.forEach(t=>{const r=getTReview(t.id,ym); if(r){[r.reply,r.satis,r.comm,r.exec].forEach(v=>{if(v)vals.push(v);});}});
@@ -730,13 +756,37 @@ function memberScore(memberId){
     resultsPct: rScore===null?null:Math.round(rScore*100)};
 }
 // تسجيل نشر في السجل (مرة واحدة لكل كارت في اليوم)
-async function recordPublish(card){
+async function recordPublish(card, dateStr){
   if(!card.teacher_id) return;
-  const today=ymd(new Date());
+  const day = dateStr || ymd(new Date());
   // امنع التكرار لو الكارت ده اتسجّل قبل كده
   if(card.id && PUBLOG.some(l=>l.card_id===card.id)) return;
-  await sb.from('publish_log').insert({card_id:card.id||null, teacher_id:card.teacher_id, member_id:card.assignee_id||ME.id, pub_date:today});
+  await sb.from('publish_log').insert({card_id:card.id||null, teacher_id:card.teacher_id, member_id:card.assignee_id||ME.id, pub_date:day});
 }
+// نافذة: البوست ده اتنشر يوم كام؟ (الموظف: آخر ٣ أيام · القائد/الأدمن: أي يوم فات)
+window.openPublishDate=function(cardId){
+  const card=CARDS.find(c=>c.id===cardId); if(!card){return;}
+  if(card.id && PUBLOG.some(l=>l.card_id===card.id)){return;} // اتسجّل قبل كده
+  const farBackdate = ME.role==='lead'||ME.role==='manager'||ME.role==='admin';
+  const mk=(off)=>{const d=new Date();d.setDate(d.getDate()-off);return ymd(d);};
+  const lbl=(off)=>off===0?'النهاردة':off===1?'امبارح':'أول امبارح';
+  let chosen=mk(0);
+  const quick=[0,1,2].map(off=>`<button data-d="${mk(off)}" class="pdq ${off===0?'on':''}">${lbl(off)}<div style="font-size:10px;opacity:.6">${mk(off).slice(5)}</div></button>`).join('');
+  document.getElementById('mTitle').textContent='البوست اتنشر يوم كام؟';
+  document.getElementById('mBody').innerHTML=`
+    <div class="lt-empty" style="margin-bottom:12px;font-size:12.5px">اختار اليوم اللي اتنشر فيه فعلاً على السوشيال — عشان التقويم يطلع مظبوط.</div>
+    <div class="pubq">${quick}</div>
+    ${farBackdate?`<div class="field" style="margin-top:14px"><label>أو اختار يوم تاني (للقادة)</label><input type="date" id="pubFar" max="${ymd(new Date())}"></div>`:'<div style="font-size:11px;color:var(--faint);margin-top:10px">لو اتنشر من أكتر من ٣ أيام، اطلب من التيم ليدر يظبّط التاريخ.</div>'}`;
+  document.getElementById('mFoot').innerHTML=`<button class="btn primary" id="pubSave" style="flex:1">تأكيد النشر</button>`;
+  const qbtns=document.querySelectorAll('.pubq .pdq');
+  qbtns.forEach(b=>b.onclick=()=>{chosen=b.dataset.d;qbtns.forEach(x=>x.classList.toggle('on',x===b));const f=document.getElementById('pubFar');if(f)f.value='';});
+  if(farBackdate){const f=document.getElementById('pubFar');f.onchange=()=>{if(f.value){chosen=f.value;qbtns.forEach(x=>x.classList.remove('on'));}};}
+  document.getElementById('pubSave').onclick=async()=>{
+    await recordPublish(card, chosen);
+    closeModal(); await reload(); render(); toast('اتسجّل النشر يوم '+chosen+' ✓');
+  };
+  document.getElementById('overlay').classList.add('show');
+};
 function dueLabel(d){if(!d)return'—';const days=Math.round((new Date(d+'T00:00:00')-new Date(ymd(new Date())+'T00:00:00'))/864e5);
   if(days===0)return'النهاردة';if(days<0)return'متأخر '+(-days)+'ي';if(days===1)return'بكرة';return'بعد '+days+'ي';}
 function roleLabel(r){return r==='admin'?'أدمن':r==='manager'?'أكونت مانجر':r==='lead'?'تيم ليدر':'عضو';}
@@ -799,7 +849,11 @@ function scopeIds(){
 }
 function visibleCards(){
   let cs;
-  if(ME.role==='member'){
+  if(scopeTeacher){
+    // خطة مدرّس: نوري كل بوستات/تاسكات المدرّس ده اللي في نطاقك (مش بس شغلك إنت)
+    const allowed = ME.role==='admin' ? null : scopeIds();
+    cs = CARDS.filter(c=>c.teacher_id===scopeTeacher && (!allowed || allowed.includes(c.assignee_id)));
+  } else if(ME.role==='member'){
     cs=CARDS.filter(c=>c.assignee_id===ME.id);          // العضو: شغله بس
   } else if(boardScope==='team'){
     const ids=scopeIds().filter(id=>id!==ME.id);         // التيم: كل اللي تحتي من غيري
@@ -807,7 +861,6 @@ function visibleCards(){
   } else {
     cs=CARDS.filter(c=>c.assignee_id===ME.id);           // شغلي أنا بس
   }
-  if(scopeTeacher) cs=cs.filter(c=>c.teacher_id===scopeTeacher);
   if(filterCat) cs=cs.filter(c=>c.category===filterCat);
   const q=document.getElementById('search').value.trim();
   if(q) cs=cs.filter(c=>(c.title+' '+T(c.teacher_id).name).includes(q));
@@ -893,10 +946,85 @@ function boardView(){
       <button class="${boardScope==='team'?'on':''}" onclick="boardScope='team';render()">👥 شغل التيم</button></div>` : '';
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
   const scopeSub = ME.role!=='member' ? (boardScope==='team'?' · شغل تيمك':' · شغلك إنت') : '';
+  const planCal = (scopeTeacher && !isTask) ? planCalendar(T(scopeTeacher)) : '';
   return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}${scopeSub}</div></div></div>
-    ${tabs}${scopeTabs}${planBanner}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
+    ${tabs}${scopeTabs}${planBanner}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>${olderBtn()}`;
 }
+function planCalendar(t){
+  const done=publishedDays(t.id);
+  const forgiven=forgivenDaysForTeacher(t.id);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const ms=monthStart();
+  const assigned = t.assigned_at ? new Date(t.assigned_at+'T00:00:00') : null;
+  const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
+  let cells=dayLabels.map(l=>`<div class="pd lbl">${l}</div>`).join('');
+  for(let i=0;i<ms.getDay();i++) cells+='<div class="pd"></div>';
+  let d=new Date(ms); const monthIdx=ms.getMonth();
+  while(d.getMonth()===monthIdx){
+    const ds=ymd(d), num=d.getDate();
+    const isToday = ds===ymd(today);
+    const canFix = ME.role!=='member';
+    let cls='', click='', cnt=0;
+    if(done.has(ds)){ cls='ok'; cnt=PUBLOG.filter(l=>l.teacher_id===t.id&&l.pub_date===ds).length; click=`onclick="openDayPosts('${t.id}','${ds}')"`; }
+    else if(d>today) cls='fut';                       // أيام جاية
+    else if(isToday){ cls='fut'; if(canFix) click=`onclick="openDayPosts('${t.id}','${ds}')"`; } // النهارده محايد
+    else if(assigned && d<assigned) cls='fut';        // قبل ما المدرّس يتسند
+    else if(forgiven.has(ds)){ cls='rest'; if(canFix) click=`onclick="openDayPosts('${t.id}','${ds}')"`; }
+    else { cls='miss'; if(canFix) click=`onclick="openDayPosts('${t.id}','${ds}')"`; } // يوم فات
+    cells+=`<div class="pd ${cls}${isToday?' tdy':''}${click&&cls!=='ok'?' fixable':''}" ${click}>${num}${cnt>1?`<span class="pdc">${cnt}</span>`:''}</div>`;
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  const total=done.size, miss=teacherMissInfo(t.id).counted;
+  return `<div class="plan-cal">
+    <div class="pc-head"><b>📅 تقويم ${new Date().toLocaleDateString('ar-EG',{month:'long'})}</b>
+      <span class="pc-leg">🟢 نزل ${total} · 🔴 فات ${miss} · ⚪ إجازة</span></div>
+    <div class="pcal">${cells}</div>
+    <div style="font-size:11px;color:var(--faint);margin-top:8px;text-align:center">${ME.role!=='member'?'دوس على أي يوم تضيف/تشيل نشر (تصحيح) · اليوم الأخضر تشوف اللي اتنشر فيه':'دوس على أي يوم أخضر تشوف اللي اتنشر فيه'}</div>
+  </div>`;
+}
+window.openDayPosts=function(tid,date){
+  const t=T(tid);
+  const logs=PUBLOG.filter(l=>l.teacher_id===tid&&l.pub_date===date);
+  const canFix = ME.role!=='member';
+  const items=logs.map(l=>{const c=CARDS.find(x=>x.id===l.card_id); return {log:l, card:c};});
+  document.getElementById('mTitle').textContent='يوم '+date+' — '+t.name;
+  let body='';
+  if(items.length){
+    body += `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">اللي اتسجّل في اليوم ده:</div>`;
+    body += items.map(it=>`
+      <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div><div style="font-weight:700">${esc(it.card?it.card.title:'بوست (اتسجّل يدوي)')}</div>
+          ${it.card&&it.card.category?`<div style="font-size:12px;color:var(--muted)">${it.card.category}${it.card.quality?' · '+qualityName(it.card.quality):''}</div>`:''}</div>
+        <div style="display:flex;gap:6px;flex:none">
+          ${it.card?`<button class="btn ghost" style="height:30px" onclick="closeModal();openCard('${it.card.id}')">افتح</button>`:''}
+          ${canFix?`<button class="btn ghost" style="height:30px;border-color:var(--danger);color:var(--danger)" onclick="removePublog('${it.log.id}')">🗑 شيل</button>`:''}
+        </div>
+      </div>`).join('');
+  } else {
+    body += `<div class="lt-empty" style="margin-bottom:10px">مفيش نشر متسجّل في اليوم ده.</div>`;
+  }
+  if(canFix){
+    body += `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px">
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">تصحيح: سجّل إن المدرّس نزّل في اليوم ده (لو نزل فعلاً واتنسى يتسجّل).</div>
+      <button class="btn primary" style="width:100%" onclick="addBackdate('${tid}','${date}')">✓ سجّل نشر في يوم ${date.slice(8)}/${date.slice(5,7)}</button></div>`;
+  }
+  document.getElementById('mBody').innerHTML = body;
+  document.getElementById('mFoot').innerHTML=`<button class="btn" style="flex:1" onclick="closeModal()">تمام</button>`;
+  document.getElementById('overlay').classList.add('show');
+};
+window.addBackdate=async function(tid,date){
+  const t=T(tid);
+  const {error}=await sb.from('publish_log').insert({card_id:null, teacher_id:tid, member_id:t.owner_id||ME.id, pub_date:date});
+  if(error)return toast(error.message,true);
+  await reload(); closeModal(); render(); toast('اتسجّل نشر يوم '+date+' ✓');
+};
+window.removePublog=async function(logId){
+  if(!confirm('متأكد تشيل التسجيل ده؟'))return;
+  const {error}=await sb.from('publish_log').delete().eq('id',logId);
+  if(error)return toast(error.message,true);
+  await reload(); closeModal(); render(); toast('اتشال ✓');
+};
 function dueChip(c){
   if((c.kind||'post')==='post' && c.status==='published') return `<span class="due" style="color:var(--ready)">✓ اتنشر</span>`;
   if((c.kind||'post')==='task' && c.status==='done') return `<span class="due" style="color:var(--ready)">✓ خلص</span>`;
@@ -947,7 +1075,10 @@ function wireBoard(){
         return;
       }
       if(ME.role==='member'&&(ns==='ready'||ns==='published')&&c.status!=='ready'){toast('الأعضاء بيحوّلوا لـ «محتاج مراجعة» والتيم ليدر يوافق',true);return;}
-      if(c.status!==ns){const wasPub=c.status==='published';c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);if(ns==='published'&&!wasPub){await recordPublish(c);await reload();render();}}
+      if(c.status!==ns){const wasPub=c.status==='published';const wasReview=c.status==='review';c.status=ns;render();await sb.from('cards').update({status:ns}).eq('id',id);
+        if(ns==='published'&&!wasPub){await openPublishDate(c.id);}
+        if(ns==='review'&&!wasReview){const lead=U(c.assignee_id).lead_id;if(lead)await notify(lead,'post_review',`${U(c.assignee_id).name} مستني مراجعتك على البوست: ${c.title}`,c.id);}
+      }
     });
   });
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
@@ -1002,11 +1133,11 @@ function agendaView(){
 }
 function teacherStatChip(t){
   const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
-  return `<div class="rank-row" style="cursor:pointer" onclick="linkTeacher='${t.id}';view='linktree';render()">
+  return `<div class="rank-row" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
     ${avaT(t.id,34)}
     <div class="rank-main"><div class="nm">${t.name}</div>
       <div class="sub"><span>📤 ${posts} بوست</span><span style="color:${missed?'var(--danger)':'inherit'}">${missed?'⚠ '+missed+' يوم فايت':'✓ ملتزم'}</span></div></div>
-    <span style="color:var(--faint)">🔗</span></div>`;
+    <span class="t" style="background:var(--brand);color:#fff;flex:none" onclick="event.stopPropagation();linkTeacher='${t.id}';view='linktree';render()">🔗</span></div>`;
 }
 function detailView(){
   const p=U(detailId); if(!p||!p.id){view='team';return teamView();}
@@ -1335,7 +1466,7 @@ function teachersTracking(){
   return `<div class="grid3">${ts.map(t=>{
     const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted, owner=U(t.owner_id);
     const canRate = ME.role!=='member' && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id));
-    const rev=getTReview(t.id,ymNow());
+    const rev=getTReview(t.id,shiftYm(ymNow(),-1));
     const revLine = rev
       ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px">${TR_CRITERIA.map(cr=>{const v=rev[cr.k];if(!v)return'';const c=v===3?'var(--ready)':v===2?'var(--doing)':'var(--danger)';return `<span class="tag plat" style="color:${c};border-color:${c}" title="${cr.name}">${cr.ico} ${TR_OPTS.find(o=>o.v===v).name}</span>`;}).join('')}</div>`
       : (canRate?`<div style="font-size:11px;color:var(--faint);margin:8px 0 4px">لسه ماتقيّمش الشهر ده</div>`:'');
@@ -1353,11 +1484,12 @@ function teachersTracking(){
   }).join('')}</div>`;
 }
 window.openTReview=function(tid){
-  const t=T(tid), ym=ymNow(), rev=getTReview(tid,ym)||{};
+  const t=T(tid), ym=shiftYm(ymNow(),-1), rev=getTReview(tid,ym)||{};
+  const monthName=new Date(ym+'-01T00:00:00').toLocaleDateString('ar-EG',{month:'long'});
   const cur={reply:rev.reply||null,satis:rev.satis||null,comm:rev.comm||null,exec:rev.exec||null};
   document.getElementById('mTitle').textContent='تقييم متابعة: '+t.name;
   document.getElementById('mBody').innerHTML=`
-    <div class="lt-empty" style="margin-bottom:10px;font-size:12.5px">تقييمك الشهر ده لإدارة المدرّس — بيدخل في تقييم المسؤول عنه.</div>
+    <div class="lt-empty" style="margin-bottom:10px;font-size:12.5px">تقييمك لإدارة المدرّس في شهر <b>${monthName}</b> (الشهر اللي فات) — بيدخل في تقييم المسؤول عنه.</div>
     ${TR_CRITERIA.map(cr=>`<div class="field"><label>${cr.ico} ${cr.name}</label>
       <div class="seg" id="tr_${cr.k}">${TR_OPTS.map(o=>`<button data-v="${o.v}" class="${cur[cr.k]===o.v?'on':''}">${o.name}</button>`).join('')}</div></div>`).join('')}
     <div class="field"><label>ملاحظة (اختياري)</label><input id="tr_note" value="${rev.note?escAttr(rev.note):''}" placeholder="مثلاً: المدرّس طلب كذا…"></div>`;
@@ -1881,14 +2013,14 @@ async function checkWelcome(){
 /* كل ما تعمل تحديث مهم: زوّد رقم v واحد، واكتب الجديد في items.
    هتظهر لكل الناس مرة واحدة بس، وبعد ما يقفلوها مش هتتكرر. */
 const LATEST_UPDATE={
-  v:3,
+  v:4,
   title:'جديد في السايت 🎉',
   items:[
-    '🤝 متابعة المدرّس: القائد بيقيّم كل شهر إدارة المدرّس (سرعة الرد، رضاه، التواصل، تنفيذ طلباته) — وبتدخل في التقييم.',
-    '⭐ التقييم الجديد: جودة ٤٠٪ + متابعة المدرّس ٢٠٪ + النزول ٢٠٪ + التقرير ٢٠٪، مع مستويات بالاسم واللون.',
-    '🏆 ترتيب الموظفين (مجموعات) + ترتيب التيمات.',
-    '👤 البورد مفصول: «شغلي» و«شغل التيم».',
-    '⚡ تحسينات في السرعة والأمان + نسخة احتياطية.',
+    '🔔 إشعارات جديدة: تذكير أول الشهر (تقارير/تقييمات)، تنبيه لو مدرّس ما نزلش امبارح، تنبيه الحاجات المتأخرة، وتنبيه للقائد عن اللي فوّتوا أيام.',
+    '📅 تقويم شهري في صفحة كل مدرّس: تشوف نزل امتى وفات امتى، وتدوس على أي يوم تشوف اللي اتنشر فيه.',
+    '🗓 وقت ما تنشر بوست بتختار اتنشر يوم كام (لو اتأخرت في التسجيل) — والقائد يقدر يصحّح أي يوم من التقويم.',
+    '🤝 متابعة المدرّس + التقييم الجديد (جودة ٤٠٪ + متابعة ٢٠٪ + نزول ٢٠٪ + تقرير ٢٠٪).',
+    '🏆 ترتيب الموظفين + ترتيب التيمات.',
   ],
 };
 function checkUpdate(){
@@ -2232,11 +2364,24 @@ window.openCard=function(id,newKind){
     if(error)return toast(error.message,true);
     // إشعار: تاسك مطلوبة من قائد لعضو
     if(!c && isTask && data.requested_by){ await notify(data.assignee_id,'task_assigned',`${ME.name} بعتلك تاسك: ${t}${data.due?' — تسليمها '+data.due:''}`,null); }
-    if(!isTask && cur==='published' && !wasPub){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:c?c.id:null}); }
+    const pubTransition = (!isTask && cur==='published' && !wasPub);
+    if(pubTransition && !c){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:null}); }
+    // إشعار: القائد قيّم بوست العضو
+    if(!isTask && curQuality && (!c || c.quality!==curQuality) && data.assignee_id!==ME.id){
+      await notify(data.assignee_id,'post_rated',`${ME.name} قيّم بوستك «${t}»: ${qualityName(curQuality)}`,c?c.id:null);
+    }
+    // إشعار: عضو حوّل بوست لـ«محتاج مراجعة» → القائد بتاعه
+    if(!isTask && cur==='review' && (!c || c.status!=='review')){
+      const lead=U(data.assignee_id).lead_id; if(lead) await notify(lead,'post_review',`${U(data.assignee_id).name} مستني مراجعتك على البوست: ${t}`,c?c.id:null);
+    }
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
+    if(pubTransition && c){ openPublishDate(c.id); }
   };
   if(!isTask && c&&canApprove()&&c.status==='review'){
-    document.getElementById('f_approve').onclick=async()=>{await sb.from('cards').update({status:'ready',quality:curQuality}).eq('id',c.id);await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
+    document.getElementById('f_approve').onclick=async()=>{
+      await sb.from('cards').update({status:'ready',quality:curQuality}).eq('id',c.id);
+      if(curQuality && c.quality!==curQuality && c.assignee_id!==ME.id) await notify(c.assignee_id,'post_rated',`${ME.name} قيّم بوستك «${c.title}»: ${qualityName(curQuality)}`,c.id);
+      await reload();closeModal();render();toast('اتوافق — جاهز للنشر');};
     document.getElementById('f_return').onclick=async()=>{const note=prompt('سبب الرجوع:');if(note===null)return;
       if(note.trim())await sb.from('comments').insert({card_id:c.id,author_id:ME.id,text:'↩ '+note.trim()});
       await sb.from('cards').update({status:'doing'}).eq('id',c.id);
@@ -2257,6 +2402,7 @@ async function notify(userId,type,text,cardId){
   if(!userId||userId===ME.id) return; // مش بنبعت لنفسنا
   await sb.from('notifications').insert({user_id:userId,actor_id:ME.id,type,text,card_id:cardId||null});
 }
+function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':t==='post_review'?'🔔':t==='post_rated'?'⭐':t==='post_approved'?'✅':t==='signup'?'📝':t==='month_start'?'🗓':t==='miss_alert'?'⚠️':t==='due_alert'?'⏰':'🔔';}
 function visibleNotifs(){
   return NOTIFS.filter(n=>!(n.type==='weekly_review' && ME.role!=='lead' && ME.role!=='manager'));
 }
@@ -2265,7 +2411,6 @@ function renderBell(){
   const b=document.getElementById('nbadge');
   if(b){ b.textContent=unread; b.style.display=unread?'grid':'none'; }
 }
-function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':'🔔';}
 function timeAgo(ts){const s=Math.floor((Date.now()-new Date(ts))/1000);
   if(s<60)return'دلوقتي';if(s<3600)return Math.floor(s/60)+' د';if(s<86400)return Math.floor(s/3600)+' س';return Math.floor(s/86400)+' ي';}
 function toggleNotifPanel(){
@@ -2299,8 +2444,57 @@ async function checkWeeklyReview(){
   const already=NOTIFS.some(n=>n.type==='weekly_review'&&n.created_at>weekAgo);
   if(already)return;
   await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:'weekly_review',text:'🗓 مراجعة الأسبوع: راجع شغل فريقك وقيّم أداءهم الأسبوع ده.'});
-  const {data}=await sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50);
+  await refetchMyNotifs();
+}
+async function refetchMyNotifs(){
+  const {data}=await sb.from('notifications').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(50);
   NOTIFS=data||NOTIFS;
+}
+// تذكيرات دورية بتظهر أول ما تفتح السايت (بداية الشهر / المدرّس ما نزلش / مواعيد متأخرة)
+async function checkPeriodicNotifs(){
+  const today=ymd(new Date()), ym=ymNow(), inserts=[];
+  // (١) بداية الشهر: مهام أول الشهر (مرة في الشهر)
+  const hadMonth=NOTIFS.some(n=>n.type==='month_start' && (n.created_at||'').slice(0,7)===ym);
+  if(!hadMonth){
+    if(ME.role==='member'){
+      inserts.push({type:'month_start',text:'🗓 أول الشهر: سجّل تقرير الشهر اللي فات (متابعين/مشاهدات/تفاعل) لكل مدرّسينك من صفحة «التقارير الشهرية».'});
+    } else if(ME.role==='lead'||ME.role==='manager'){
+      inserts.push({type:'month_start',text:'🗓 أول الشهر: قيّم متابعة مدرّسين فريقك عن الشهر اللي فات (من «التقييم ← متابعة المدرّسين»)، واتأكد إن فريقك سجّل تقاريرهم.'});
+    }
+  }
+  // (٢) للعضو: مدرّس ما نزّلش امبارح (تذكير يومي، مرة في اليوم)
+  if(ME.role==='member'){
+    const hadMiss=NOTIFS.some(n=>n.type==='miss_alert' && (n.created_at||'').slice(0,10)===today);
+    if(!hadMiss){
+      const y=new Date(Date.now()-864e5); const yStr=ymd(y);
+      const myTeachers=TEACHERS.filter(t=>t.owner_id===ME.id);
+      const missed=myTeachers.filter(t=>{
+        const done=publishedDays(t.id); const assigned=t.assigned_at?new Date(t.assigned_at+'T00:00:00'):null;
+        if(assigned && y<assigned) return false;
+        return !done.has(yStr) && !forgivenDaysForTeacher(t.id).has(yStr);
+      }).map(t=>t.name);
+      if(missed.length) inserts.push({type:'miss_alert',text:`⚠️ امبارح ما نزلش بوست لـ: ${missed.join('، ')}. لو فيه سبب تمام، لو لأ عوّضها.`});
+    }
+  }
+  // (٣) مواعيد متأخرة عليّ (مرة في اليوم)
+  const hadDue=NOTIFS.some(n=>n.type==='due_alert' && (n.created_at||'').slice(0,10)===today);
+  if(!hadDue){
+    const overdue=CARDS.filter(c=>c.assignee_id===ME.id && isLate(c));
+    if(overdue.length) inserts.push({type:'due_alert',text:`⏰ عندك ${overdue.length} ${overdue.length===1?'حاجة متأخرة':'حاجات متأخرة'} عن ميعادها. راجع الأجندة.`});
+  }
+  // (٤) للقائد: عضو في فريقك فوّت أيام كتير (مرة في الأسبوع)
+  if(ME.role==='lead'||ME.role==='manager'){
+    const weekAgo=new Date(Date.now()-6*864e5).toISOString();
+    const hadPerf=NOTIFS.some(n=>n.type==='perf_alert'&&n.created_at>weekAgo);
+    if(!hadPerf){
+      const weak=descendantIds().filter(id=>U(id).role==='member'&&U(id).active!==false).filter(id=>memberMissed(id)>=5).map(id=>U(id).name);
+      if(weak.length) inserts.push({type:'perf_alert',text:`⚠️ في فريقك فوّتوا أيام كتير الشهر ده: ${weak.join('، ')}. تابع معاهم.`});
+    }
+  }
+  if(inserts.length){
+    for(const it of inserts){ await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:it.type,text:it.text}); }
+    await refetchMyNotifs();
+  }
 }
 
 /* ---------- wiring ---------- */
