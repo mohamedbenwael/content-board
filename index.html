@@ -1132,7 +1132,7 @@ function agendaView(){
   return `<div class="page-head"><div><div class="page-title">الأجندة</div><div class="page-sub">شغلك مرتّب بالأيام — النهارده، بكرة، وبعدين</div></div></div>${toggle}${body}${olderBtn()}`;
 }
 function teacherStatChip(t){
-  const posts=teacherPosts(t.id), missed=missedDaysForTeacher(t.id).length;
+  const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted;
   return `<div class="rank-row" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
     ${avaT(t.id,34)}
     <div class="rank-main"><div class="nm">${t.name}</div>
