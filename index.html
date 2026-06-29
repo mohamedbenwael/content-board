@@ -1354,27 +1354,20 @@ function rankGroup(role){
 }
 const ROLE_GROUPS=[['member','🧑‍💻 الأعضاء'],['lead','🎖 التيم ليدرز'],['manager','📊 الأكونت مانجرز']];
 function myScoreCard(){
-  const rows=rankGroup(ME.role); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
+  if(ME.role!=='member') return '';
+  const rows=rankGroup('member'); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
   const sc=me.score, col=sc===null?'var(--faint)':scoreColor(sc);
-  let breakdown='';
-  if(ME.role==='member'){
-    breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
+  const breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
       ${me.qualityPct!=null?`<span>💡 جودة ${me.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمتش</span>'}
       ${me.managePct!=null?`<span>🤝 المدرّس ${me.managePct}٪</span>`:''}
       ${me.postingPct!=null?`<span>🗓 نزول ${me.postingPct}٪</span>`:''}
       ${me.resultsPct!=null?`<span>📈 تقارير ${me.resultsPct}٪</span>`:''}</div>`;
-  } else {
-    breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
-      ${me.own!=null?`<span>👤 شغلك ${me.own}</span>`:''}
-      ${me.team!=null?`<span>👥 فريقك ${me.team}</span>`:'<span style="color:var(--faint)">👥 فريقك لسه</span>'}</div>`;
-  }
-  const groupName={member:'الأعضاء',lead:'التيم ليدرز',manager:'الأكونت مانجرز'}[ME.role]||'';
   const tier=scoreTier(sc);
   return `<div class="lt-empty" style="text-align:center;margin-bottom:18px;padding:18px">
     <div style="font-size:13px;color:var(--muted)">تقييمك الشهر ده</div>
     <div style="display:inline-flex;align-items:center;gap:6px;background:${tier.color}22;color:${tier.color};font-weight:800;font-size:14px;padding:5px 14px;border-radius:20px;margin:8px 0 2px">${tier.ico} ${tier.name}</div>
     <div style="font-size:44px;font-weight:900;color:${col};line-height:1.1;margin:2px 0">${sc===null?'—':sc}</div>
-    <div style="font-size:13px;color:var(--muted)">${sc===null?'لسه بتتقيّم':'من ١٠٠'} · ترتيبك <b style="color:var(--brand)">${me._pos}</b> من ${rows.length} في ${groupName}</div>
+    <div style="font-size:13px;color:var(--muted)">${sc===null?'لسه بتتقيّم':'من ١٠٠'} · ترتيبك <b style="color:var(--brand)">${me._pos}</b> من ${rows.length} في كل الموظفين</div>
     ${breakdown}</div>`;
 }
 function rankView(){
@@ -1387,7 +1380,7 @@ function rankView(){
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
       <button class="${rankTab==='teams'?'on':''}" onclick="rankTab='teams';render()">🏆 ترتيب التيمات</button>
       <button class="${rankTab==='teachers'?'on':''}" onclick="rankTab='teachers';render()">متابعة المدرّسين</button>
-    </div>`:'<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">ترتيب الأعضاء</div>'}`;
+    </div>`:''}`;
   if(isMember) return head + membersRank();
   return head + (rankTab==='members'? membersRank() : rankTab==='teams'? teamsRank() : teachersTracking());
 }
@@ -1408,10 +1401,10 @@ function rankSubLine(r){
     ${r.team!=null?`<span>👥 فريقه ${r.team}</span>`:'<span style="color:var(--faint)">👥 فريقه لسه</span>'}
   </div>`;
 }
-function rankRowHTML(r,pos){
-  const u=U(r.id), isNew=r.score===null, medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'', isMe=r.id===ME.id;
+function rankRowHTML(r,pos,plain){
+  const u=U(r.id), isNew=r.score===null, medal=(!plain&&pos===1)?'g1':(!plain&&pos===2)?'g2':(!plain&&pos===3)?'g3':'', isMe=r.id===ME.id;
   const tier=scoreTier(r.score);
-  return `<div class="rank-row ${pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}">
+  return `<div class="rank-row ${!plain&&pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}">
     <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
     ${avaP(r.id,38)}
     <div class="rank-main"><div class="nm">${u.name}${isMe?' (إنت)':''}</div>${rankSubLine(r)}</div>
@@ -1419,39 +1412,29 @@ function rankRowHTML(r,pos){
   </div>`;
 }
 function membersRank(){
-  // العضو: مجموعته بس (الأوائل + ترتيبه)
+  // العضو: التوب 3 (كل الموظفين) + تيمه + ترتيبه العام
   if(ME.role==='member'){
     const rows=rankGroup('member');
-    if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش أعضاء.</div>`;
+    if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش موظفين.</div>`;
     const me=rows.find(r=>r.id===ME.id), top3=rows.slice(0,3);
-    let html=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">🏆 الأوائل</div>`;
+    let html=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">🏆 أوائل الشركة</div>`;
     html+=top3.map(r=>rankRowHTML(r,r._pos)).join('');
-    if(me && me._pos>3){
-      html+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13px;font-weight:800">ترتيبك إنت</div>`+rankRowHTML(me,me._pos);
+    // تيمك: زمايلك في نفس التيم (نفس القائد)
+    const myLead=U(ME.id).lead_id;
+    const team=rows.filter(r=>U(r.id).lead_id===myLead);
+    if(team.length){
+      html+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13px;font-weight:800">👥 ترتيبك في تيمك</div>`;
+      html+=team.map((r,i)=>rankRowHTML(r,i+1,true)).join('');
     }
-    html+=`<div class="lt-empty" style="margin-top:14px;font-size:12.5px;text-align:center">إنت رقم ${me?me._pos:'—'} من ${rows.length} في الأعضاء 💪</div>`;
+    html+=`<div class="lt-empty" style="margin-top:14px;font-size:12.5px;text-align:center">ترتيبك العام: رقم ${me?me._pos:'—'} من ${rows.length} في كل الموظفين 💪</div>`;
     return html;
   }
-  // التيم ليدر: مجموعة التيم ليدرز بالأسماء + فريقه هو (أعضاؤه)
-  if(ME.role==='lead'){
-    let out='';
-    const leads=rankGroup('lead');
-    out+=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🎖 التيم ليدرز <span style="color:var(--faint)">(${leads.length})</span></div>`;
-    out+=leads.map(r=>rankRowHTML(r,r._pos)).join('');
-    const myMems=rankGroup('member').filter(r=>U(r.id).lead_id===ME.id);
-    out+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13.5px;font-weight:800">👥 فريقك</div>`;
-    out+= myMems.length? myMems.map(r=>rankRowHTML(r,r._pos)).join('') : `<div class="lt-empty">لسه مفيش أعضاء في فريقك.</div>`;
-    return out;
-  }
-  // الأكونت مانجر والأدمن: كل الناس (٣ مجموعات)
-  let out='';
-  ROLE_GROUPS.forEach(([role,label])=>{
-    const rows=rankGroup(role);
-    if(!rows.length)return;
-    out+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13.5px;font-weight:800">${label} <span style="color:var(--faint)">(${rows.length})</span></div>`;
-    out+=rows.map(r=>rankRowHTML(r,r._pos)).join('');
-  });
-  return out || `<div class="empty"><div class="big">★</div>لسه مفيش موظفين بشغل.</div>`;
+  // القادة والأدمن: ترتيب كل الموظفين (الأعضاء بس)
+  const rows=rankGroup('member');
+  if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش موظفين بشغل.</div>`;
+  let out=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🧑‍💻 ترتيب الموظفين <span style="color:var(--faint)">(${rows.length})</span></div>`;
+  out+=rows.map(r=>rankRowHTML(r,r._pos)).join('');
+  return out;
 }
 // ترتيب التيمات: كل تيم ليدر + أعضاؤه = تيم
 function teamsRank(){
@@ -1459,7 +1442,7 @@ function teamsRank(){
   if(!leads.length) return `<div class="empty"><div class="big">🏆</div>لسه مفيش تيمات. لما تحدّد تيم ليدرز وأعضاء، هتظهر ترتيبات التيمات هنا.</div>`;
   let rows=leads.map(l=>{
     const memberCount=PROFILES.filter(p=>p.lead_id===l.id&&p.role==='member'&&p.active!==false).length;
-    return {id:l.id, name:l.name, score:scoreFor(l.id).score, memberCount};
+    return {id:l.id, name:l.name, score:teamAvgScore(l.id), memberCount};
   });
   rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
   return rows.map((r,i)=>{
