@@ -593,6 +593,7 @@ async function enterApp(){
   }
   await checkWeeklyReview();
   await checkPeriodicNotifs();
+  await checkBalanceAlerts();
   hide('loading'); show('app');
   wireApp(); render();
   postLoadModals();
@@ -2550,7 +2551,7 @@ async function notify(userId,type,text,cardId){
   if(!userId||userId===ME.id) return; // مش بنبعت لنفسنا
   await sb.from('notifications').insert({user_id:userId,actor_id:ME.id,type,text,card_id:cardId||null});
 }
-function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':t==='post_review'?'🔔':t==='post_rated'?'⭐':t==='post_approved'?'✅':t==='signup'?'📝':t==='month_start'?'🗓':t==='miss_alert'?'⚠️':t==='due_alert'?'⏰':'🔔';}
+function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':t==='post_review'?'🔔':t==='post_rated'?'⭐':t==='post_approved'?'✅':t==='signup'?'📝':t==='month_start'?'🗓':t==='miss_alert'?'⚠️':t==='due_alert'?'⏰':t==='balance_alert'?'📊':t==='balance_team'?'📋':'🔔';}
 function visibleNotifs(){
   return NOTIFS.filter(n=>!(n.type==='weekly_review' && ME.role!=='lead' && ME.role!=='manager'));
 }
@@ -2598,6 +2599,123 @@ async function refetchMyNotifs(){
   const {data}=await sb.from('notifications').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(50);
   NOTIFS=data||NOTIFS;
 }
+// ===== تقرير Balance الكونتنت الأسبوعي =====
+// يتبعت مرة في الأسبوع لكل عضو بتفاصيل مدرّسينه (كوميك/ريلز/ديزاين)
+// وللتيم ليدر ملخص كامل لفريقه + تنبيهات لكل عضو عنده مخالفات
+async function checkBalanceAlerts(){
+  const weekAgo=new Date(Date.now()-6*864e5).toISOString();
+
+  // ===== العضو: تقرير مدرّسيه الشخصي =====
+  if(ME.role==='member'){
+    const hadOwn=NOTIFS.some(n=>n.type==='balance_alert'&&n.created_at>weekAgo);
+    if(!hadOwn){
+      const myTeachers=TEACHERS.filter(t=>t.owner_id===ME.id);
+      if(myTeachers.length){
+        const rows=myTeachers.map(t=>{
+          const {counts,issues}=teacherWeekCompliance(t.id);
+          const parts=COMPLIANCE_RULES.map(r=>{
+            const got=counts[r.cat]||0;
+            const issue=issues.find(i=>i.rule.cat===r.cat);
+            const flag=issue?(issue.kind==='over'?'🔴':'🟠'):'✅';
+            return `${r.ico}${r.label}: ${got}${r.type==='max'?'/'+r.n:''}${r.type==='min'?' (الحد الأدنى '+r.n+')':''} ${flag}`;
+          }).join(' | ');
+          return `• ${t.name}: ${parts}`;
+        });
+        const hasVio=myTeachers.some(t=>teacherWeekCompliance(t.id).issues.length>0);
+        const header=hasVio?'⚠️ في مخالفات في كونتنت مدرّسينك الأسبوع ده':'✅ كونتنت مدرّسينك تمام الأسبوع ده';
+        await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:'balance_alert',
+          text:`📊 تقرير Balance الأسبوع\n${header}\n\n${rows.join('\n')}`});
+        // نبلّغ التيم ليدر كمان
+        if(ME.lead_id && hasVio){
+          const leadRows=myTeachers.filter(t=>teacherWeekCompliance(t.id).issues.length>0).map(t=>{
+            const {counts,issues}=teacherWeekCompliance(t.id);
+            const parts=COMPLIANCE_RULES.map(r=>{
+              const got=counts[r.cat]||0;
+              const issue=issues.find(i=>i.rule.cat===r.cat);
+              const flag=issue?(issue.kind==='over'?'🔴':'🟠'):'✅';
+              return `${r.ico}${got} ${flag}`;
+            }).join(' ');
+            return `${t.name}(${parts})`;
+          });
+          await sb.from('notifications').insert({user_id:ME.lead_id,actor_id:ME.id,type:'balance_alert',
+            text:`📊 ${ME.name} — فيه مخالفات balance عند: ${leadRows.join('، ')}`});
+        }
+        await refetchMyNotifs();
+      }
+    }
+    return;
+  }
+
+  // ===== التيم ليدر والأكونت مانجر: ملخص الفريق كامل =====
+  if(ME.role==='lead'||ME.role==='manager'){
+    const hadTeam=NOTIFS.some(n=>n.type==='balance_team'&&n.created_at>weekAgo);
+    if(hadTeam) return;
+    const members=descendantIds().filter(id=>U(id).role==='member'&&U(id).active!==false);
+    if(!members.length) return;
+
+    const summaryLines=[];
+    for(const memberId of members){
+      const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId);
+      if(!mTeachers.length) continue;
+      const vioTeachers=mTeachers.filter(t=>teacherWeekCompliance(t.id).issues.length>0);
+      const okTeachers=mTeachers.filter(t=>!teacherWeekCompliance(t.id).issues.length);
+
+      // تقرير تفصيلي للعضو نفسه (من منظور القائد)
+      const memberRows=mTeachers.map(t=>{
+        const {counts,issues}=teacherWeekCompliance(t.id);
+        const parts=COMPLIANCE_RULES.map(r=>{
+          const got=counts[r.cat]||0;
+          const issue=issues.find(i=>i.rule.cat===r.cat);
+          const flag=issue?(issue.kind==='over'?'🔴':'🟠'):'✅';
+          return `${r.ico}${r.label}:${got}${flag}`;
+        }).join(' ');
+        return `  • ${t.name}: ${parts}`;
+      });
+      const mName=U(memberId).name;
+      const mStatus=vioTeachers.length?`⚠️ ${vioTeachers.length} مخالفة`:`✅ تمام`;
+      summaryLines.push(`${mName} (${mStatus}):\n${memberRows.join('\n')}`);
+
+      // نبعت تنبيه للعضو لو عنده مخالفات
+      if(vioTeachers.length){
+        const {data:existMemberNotif}=await sb.from('notifications').select('id').eq('user_id',memberId).eq('type','balance_alert').gte('created_at',weekAgo).limit(1);
+        if(!existMemberNotif||!existMemberNotif.length){
+          const vioDetails=vioTeachers.map(t=>{
+            const {counts,issues}=teacherWeekCompliance(t.id);
+            const parts=COMPLIANCE_RULES.map(r=>{
+              const got=counts[r.cat]||0;
+              const issue=issues.find(i=>i.rule.cat===r.cat);
+              const flag=issue?(issue.kind==='over'?'🔴 زيادة':'🟠 ناقص'):'✅';
+              return `${r.ico}${r.label}: ${got} ${flag}`;
+            }).join(' | ');
+            return `• ${t.name}: ${parts}`;
+          });
+          await sb.from('notifications').insert({user_id:memberId,actor_id:ME.id,type:'balance_alert',
+            text:`📊 تنبيه balance — ${ME.name} (قايدك)\nالمدرّسين دول عندهم مخالفات الأسبوع ده:\n${vioDetails.join('\n')}\nاتأكد إن الكونتنت متوازن قبل نهاية الأسبوع.`});
+        }
+      }
+    }
+
+    const totalVio=members.filter(id=>{
+      const mt=TEACHERS.filter(t=>t.owner_id===id);
+      return mt.some(t=>teacherWeekCompliance(t.id).issues.length>0);
+    }).length;
+    const header=totalVio?`⚠️ ${totalVio} عضو عندهم مخالفات balance هذا الأسبوع`:'✅ فريقك كله ملتزم بالـ balance الأسبوع ده';
+    await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:'balance_team',
+      text:`📋 ملخص Balance فريقك — الأسبوع الحالي\n${header}\n\n${summaryLines.join('\n\n')}`});
+
+    // لو تيم ليدر، نبلّغ الأكونت مانجر كمان
+    if(ME.role==='lead'&&ME.lead_id&&totalVio>0){
+      const vioNames=members.filter(id=>{
+        const mt=TEACHERS.filter(t=>t.owner_id===id);
+        return mt.some(t=>teacherWeekCompliance(t.id).issues.length>0);
+      }).map(id=>U(id).name);
+      await sb.from('notifications').insert({user_id:ME.lead_id,actor_id:ME.id,type:'balance_team',
+        text:`📋 فريق ${ME.name} — فيه مخالفات balance عند: ${vioNames.join('، ')}`});
+    }
+    await refetchMyNotifs();
+  }
+}
+
 // تذكيرات دورية بتظهر أول ما تفتح السايت (بداية الشهر / المدرّس ما نزلش / مواعيد متأخرة)
 async function checkPeriodicNotifs(){
   const today=ymd(new Date()), ym=ymNow(), inserts=[];
