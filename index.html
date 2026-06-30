@@ -801,20 +801,39 @@ function memberManageScore(memberId){
 }
 // نقطة تقييم العضو: انتظام 30٪ + balance 25٪ + جودة 25٪ + نمو الصفحة 20٪
 // (إعادة توزيع تلقائي لو مكوّن مش متاح لعضو جديد)
-function memberScore(memberId) {
-  const isWeekEnded = new Date().getDay() >= 5; 
-  const pScore = (typeof memberScoreBase === 'function') ? memberScoreBase(memberId) : null; 
-  const bScore = isWeekEnded ? memberBalanceScore(memberId) : null; 
-  const qScore = memberQuality(memberId);
-  const gScore = memberGrowthScore(memberId);
-  const parts = [];
-  if (pScore !== null) parts.push([pScore, .30]);
-  if (bScore !== null) parts.push([bScore, .25]);
-  if (qScore !== null) parts.push([qScore, .25]);
-  if (gScore !== null) parts.push([gScore, .20]);
-  const totW = parts.reduce((s, p) => s + p[1], 0) || 1;
-  const score = Math.round(parts.reduce((s, p) => s + p[0] * p[1], 0) / totW * 100);
-  return {score, postingPct: pScore ? Math.round(pScore*100) : null, balancePct: bScore ? Math.round(bScore*100) : null, qualityPct: qScore ? Math.round(qScore*100) : null, growthPct: gScore ? Math.round(gScore*100) : null};
+function memberScore(memberId){
+  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
+  const forgiven=memberForgiven(memberId);
+  const expectedTotal=Math.max(0,expectedRaw-forgiven);
+  const posts=memberPosts(memberId);
+  const missed=memberMissed(memberId);
+  const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; // انتظام النزول
+  
+  // تعديل الـ balance عشان مايتحسبش غير آخر الأسبوع
+  const isWeekEnded = new Date().getDay() >= 5;
+  const bScore= isWeekEnded ? memberBalanceScore(memberId) : null;   // balance الأسابيع المكتملة
+  
+  const qScore=memberQuality(memberId);        // جودة (تقييم القائد)
+  const gScore=memberGrowthScore(memberId);    // نمو % مقارنة بالشهر اللي فات
+  
+  if(pScore===null && bScore===null && qScore===null && gScore===null && posts<1)
+    return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null};
+  
+  // إعادة توزيع الأوزان على المكوّنات المتاحة فقط
+  const parts=[];
+  if(pScore!==null) parts.push([pScore,.30]);
+  if(bScore!==null) parts.push([bScore,.25]);
+  if(qScore!==null) parts.push([qScore,.25]);
+  if(gScore!==null) parts.push([gScore,.20]);
+  
+  const totW=parts.reduce((s,p)=>s+p[1],0)||1;
+  const score=Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/totW*100);
+  
+  return {score, posts, missed,
+    postingPct: pScore===null?null:Math.round(pScore*100),
+    balancePct: bScore===null?null:Math.round(bScore*100),
+    qualityPct: qScore===null?null:Math.round(qScore*100),
+    growthPct:  gScore===null?null:Math.round(gScore*100)};
 }
 // تسجيل نشر في السجل (مرة واحدة لكل كارت في اليوم)
 async function recordPublish(card, dateStr){
