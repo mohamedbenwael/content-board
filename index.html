@@ -1566,16 +1566,11 @@ function rankSubLine(r) {
       ${r.growthPct != null ? `<span>📈 نمو ${r.growthPct}٪</span>` : ''}
     ` : `
       <span style="color:var(--brand)">${u.role === 'manager' ? 'أكونت مانجر' : 'تيم ليدر'}</span>
+      ${r.own != null ? `<span>👤 شغله ${r.own}</span>` : ''}
     `}
   </div>`;
 }
-  // قائد
-  return `<div class="sub">
-    <span style="color:var(--brand)">${u.role==='manager'?'أكونت مانجر':'تيم ليدر'}</span>
-    ${r.own!=null?`<span>👤 شغله ${r.own}</span>`:''}
-    ${r.team!=null?`<span>👥 فريقه ${r.team}</span>`:'<span style="color:var(--faint)">👥 فريقه لسه</span>'}
-  </div>`;
-}
+
 function rankRowHTML(r,pos,plain){
   const u=U(r.id), isNew=r.score===null, medal=(!plain&&pos===1)?'g1':(!plain&&pos===2)?'g2':(!plain&&pos===3)?'g3':'', isMe=r.id===ME.id;
   const tier=scoreTier(r.score);
