@@ -779,10 +779,11 @@ function memberBalanceScore(memberId){
     d.setDate(d.getDate()+7);
   }
   if(!completed.length) return null;
-  // لو مفيش بيانات مصنّفة خالص (كل البوستات manual بدون كارت) → null مش 0
+  // نقيّم balance بس لو في ريلز أو ديزاين مصنّفة — لو مفيش، مش عارفين نحكم على التوازن
+  const minCats=COMPLIANCE_RULES.filter(r=>r.type==='min').map(r=>r.cat);
   const hasData=completed.some(sat=>ts.some(t=>{
     const {counts}=teacherWeekCompliance(t.id,sat);
-    return CATS.some(c=>(counts[c]||0)>0);
+    return minCats.some(c=>(counts[c]||0)>0);
   }));
   if(!hasData) return null;
   const ok=completed.filter(sat=>ts.every(t=>teacherWeekCompliance(t.id,sat).issues.length===0)).length;
@@ -1585,11 +1586,12 @@ function rankSubLine(r){
 function rankRowHTML(r,pos,plain){
   const u=U(r.id), isNew=r.score===null, medal=(!plain&&pos===1)?'g1':(!plain&&pos===2)?'g2':(!plain&&pos===3)?'g3':'', isMe=r.id===ME.id;
   const tier=scoreTier(r.score);
-  return `<div class="rank-row ${!plain&&pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}">
-    <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
+  const posLabel=isNew||pos===null?'⏳':pos;
+  return `<div class="rank-row ${!plain&&pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}${isNew?'opacity:0.65':''}">
+    <div class="rank-pos ${isNew?'':medal}" style="${isNew?'font-size:16px':''}">  ${posLabel}</div>
     ${avaP(r.id,38)}
     <div class="rank-main"><div class="nm">${u.name}${isMe?' (إنت)':''}</div>${rankSubLine(r)}</div>
-    <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'لسه':tier.ico+' '+tier.name}</div></div>
+    <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'⏳ لسه':tier.ico+' '+tier.name}</div></div>
   </div>`;
 }
 function membersRank(){
@@ -1613,8 +1615,13 @@ function membersRank(){
   // القادة والأدمن: ترتيب كل الموظفين (الأعضاء بس)
   const rows=rankGroup('member');
   if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش موظفين بشغل.</div>`;
-  let out=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🧑‍💻 ترتيب الموظفين <span style="color:var(--faint)">(${rows.length})</span></div>`;
-  out+=rows.map(r=>rankRowHTML(r,r._pos)).join('');
+  const active=rows.filter(r=>r.score!==null), pending=rows.filter(r=>r.score===null);
+  let out=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🧑‍💻 ترتيب الموظفين <span style="color:var(--faint)">(${active.length})</span></div>`;
+  out+=active.map(r=>rankRowHTML(r,r._pos)).join('');
+  if(pending.length){
+    out+=`<div class="nav-group-label" style="margin:18px 4px 10px;font-size:12px;color:var(--muted);font-weight:700">⏳ لسه ماعندهمش بيانات كافية (${pending.length})</div>`;
+    out+=pending.map(r=>rankRowHTML(r,null)).join('');
+  }
   return out;
 }
 // ترتيب التيمات: كل تيم ليدر + أعضاؤه = تيم
