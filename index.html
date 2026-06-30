@@ -1379,12 +1379,68 @@ function complianceTeachers(){
 function complianceCount(){
   return complianceTeachers().filter(t=>teacherWeekCompliance(t.id).issues.length).length;
 }
+function memberBalanceBlock(){
+  // بلوك مجمّع للتيم ليدر والمانجر: كل عضو وتحته مدرّسيه مع balance
+  if(ME.role!=='lead'&&ME.role!=='manager'&&ME.role!=='admin') return '';
+  const members=descendantIds().filter(id=>U(id).role==='member'&&U(id).active!==false);
+  if(!members.length) return '';
+  const membersWithTeachers=members.filter(id=>TEACHERS.some(t=>t.owner_id===id));
+  if(!membersWithTeachers.length) return '';
+
+  const cards=membersWithTeachers.map(memberId=>{
+    const m=U(memberId);
+    const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId);
+    const teacherRows=mTeachers.map(t=>{
+      const {counts,issues}=teacherWeekCompliance(t.id);
+      const chips=COMPLIANCE_RULES.map(r=>{
+        const got=counts[r.cat]||0;
+        const bad=issues.find(i=>i.rule.cat===r.cat);
+        const col=bad?(bad.kind==='over'?'#E06A4F':'#F2A93B'):'var(--ready)';
+        return `<span style="display:inline-flex;align-items:center;gap:3px;background:${col}18;color:${col};font-weight:700;font-size:11.5px;padding:3px 8px;border-radius:12px">${r.ico} ${got}${r.type==='max'?'/'+r.n:''}</span>`;
+      }).join('');
+      const hasBad=issues.length>0;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#eee)">
+        <div style="font-size:12.5px;color:var(--text);min-width:90px;font-weight:${hasBad?'700':'400'}">${esc(t.name)}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div>
+        ${hasBad?`<span style="margin-right:auto;font-size:11px;color:#E06A4F;font-weight:700;white-space:nowrap">⚠ ${issues.length} مخالفة</span>`:`<span style="margin-right:auto;font-size:11px;color:var(--ready)">✓</span>`}
+      </div>`;
+    }).join('');
+    const totalVio=mTeachers.reduce((s,t)=>s+teacherWeekCompliance(t.id).issues.length,0);
+    const statusBadge=totalVio
+      ?`<span class="due late">⚠ ${totalVio} مخالفة</span>`
+      :`<span class="due" style="background:var(--ready)22;color:var(--ready)">✓ تمام</span>`;
+    return `<div class="card" style="margin:0;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        ${avaP(memberId)}
+        <div style="flex:1;font-size:13.5px;font-weight:700">${esc(m.name||'')}</div>
+        ${statusBadge}
+      </div>
+      ${teacherRows}
+    </div>`;
+  }).join('');
+
+  const totalBadMembers=membersWithTeachers.filter(id=>TEACHERS.filter(t=>t.owner_id===id).some(t=>teacherWeekCompliance(t.id).issues.length)).length;
+  const okMembers=membersWithTeachers.length-totalBadMembers;
+  return `<div style="margin-bottom:24px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+      👥 Balance الفريق
+      <span style="font-size:12px;font-weight:400;color:var(--muted)">كوميك ≤٢ · ريلز ≥٢ · ديزاين ≥٢</span>
+      <span style="margin-right:auto;display:flex;gap:8px">
+        <span style="background:var(--ready)22;color:var(--ready);font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:12px">✓ ${okMembers} تمام</span>
+        ${totalBadMembers?`<span style="background:#E06A4F22;color:#E06A4F;font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:12px">⚠ ${totalBadMembers} محتاج متابعة</span>`:''}
+      </span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">${cards}</div>
+  </div>`;
+}
 function complianceView(){
   const ts=complianceTeachers();
   const weekLbl=`${ymd(weekStart())} → ${ymd(weekEnd())}`;
   const head=`<div class="page-head"><div><div class="page-title">التزام المحتوى الأسبوعي</div>
     <div class="page-sub">الأسبوع الحالي (${weekLbl}) · القاعدة: الكوميكس ≤ ٢ · الريلز ≥ ٢ · الديزاين ≥ ٢</div></div></div>`;
   if(!ts.length) return head+`<div class="empty"><div class="big">🎓</div>مفيش مدرّسين في نطاقك.</div>`;
+  // قسم balance الفريق (للتيم ليدر والمانجر)
+  const teamBlock=memberBalanceBlock();
   // رتّب: اللي عندهم مخالفات الأول
   const rows=ts.map(t=>({t, c:teacherWeekCompliance(t.id)}))
               .sort((a,b)=>b.c.issues.length-a.c.issues.length);
@@ -1415,7 +1471,7 @@ function complianceView(){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">${chips}</div>
       ${issues}</div>`;
   }).join('');
-  return head+summary+`<div style="max-width:820px;display:flex;flex-direction:column;gap:10px">${body}</div>`;
+  return head+`<div style="max-width:820px">${teamBlock}${summary}<div style="display:flex;flex-direction:column;gap:10px">${body}</div></div>`;
 }
 function lateView(){
   const cs=visibleCards().filter(isLate).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
@@ -2603,6 +2659,8 @@ async function refetchMyNotifs(){
 // يتبعت مرة في الأسبوع لكل عضو بتفاصيل مدرّسينه (كوميك/ريلز/ديزاين)
 // وللتيم ليدر ملخص كامل لفريقه + تنبيهات لكل عضو عنده مخالفات
 async function checkBalanceAlerts(){
+  // الجمعة (5) = آخر يوم في الأسبوع (السبت → الجمعة)
+  if(new Date().getDay()!==5) return;
   const weekAgo=new Date(Date.now()-6*864e5).toISOString();
   // helper: سطر واحد لكل مدرّس بشكل نظيف
   function teacherLine(t){
