@@ -770,16 +770,21 @@ function memberBalanceScore(memberId){
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
   if(!ts.length) return null;
   const today=new Date(), mStart=monthStart();
-  // ابحث عن كل أسابيع الشهر اللي خلصت (الجمعة عدّت)
   const completed=[];
   let d=new Date(mStart);
-  while(d.getDay()!==6) d.setDate(d.getDate()+1); // أول سبت في الشهر أو بعده
+  while(d.getDay()!==6) d.setDate(d.getDate()+1);
   while(d<=today){
-    const fri=new Date(d); fri.setDate(d.getDate()+6); // الجمعة
-    if(fri<today) completed.push(new Date(d)); // الأسبوع خلص
+    const fri=new Date(d); fri.setDate(d.getDate()+6);
+    if(fri<today) completed.push(new Date(d));
     d.setDate(d.getDate()+7);
   }
   if(!completed.length) return null;
+  // لو مفيش بيانات مصنّفة خالص (كل البوستات manual بدون كارت) → null مش 0
+  const hasData=completed.some(sat=>ts.some(t=>{
+    const {counts}=teacherWeekCompliance(t.id,sat);
+    return CATS.some(c=>(counts[c]||0)>0);
+  }));
+  if(!hasData) return null;
   const ok=completed.filter(sat=>ts.every(t=>teacherWeekCompliance(t.id,sat).issues.length===0)).length;
   return ok/completed.length;
 }
@@ -1468,8 +1473,11 @@ function memberBalanceBlock(){
 function complianceView(){
   const ts=complianceTeachers();
   const weekLbl=`${ymd(weekStart())} → ${ymd(weekEnd())}`;
+  const today=new Date(), todayIsWeekEnd=today.getDay()===5; // الجمعة = نهاية الأسبوع
+  const weekStatus=todayIsWeekEnd?'⏳ آخر يوم من الأسبوع':'🔄 الأسبوع لسه شغال — المخالفات دي مش بتأثر على نقطة الـ balance لحد ما الأسبوع يخلص الجمعة';
   const head=`<div class="page-head"><div><div class="page-title">التزام المحتوى الأسبوعي</div>
-    <div class="page-sub">الأسبوع الحالي (${weekLbl}) · القاعدة: الكوميكس ≤ ٢ · الريلز ≥ ٢ · الديزاين ≥ ٢</div></div></div>`;
+    <div class="page-sub">الأسبوع الحالي (${weekLbl}) · ${weekStatus}</div>
+    <div class="page-sub" style="margin-top:4px">القاعدة: الكوميكس ≤ ٢ · الريلز ≥ ٢ · الديزاين ≥ ٢</div></div></div>`;
   if(!ts.length) return head+`<div class="empty"><div class="big">🎓</div>مفيش مدرّسين في نطاقك.</div>`;
   // قسم balance الفريق (للتيم ليدر والمانجر)
   const teamBlock=memberBalanceBlock();
