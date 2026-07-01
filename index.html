@@ -1806,7 +1806,7 @@ function manageView(){
     ['leads','تيم ليدرز','lead'],
     ['members','أعضاء','member'],
   ];
-  const head=`<div class="page-head"><div><div class="page-title">إدارة الفريق</div>
+ const head=`<div class="page-head"><div><div class="page-title">إدارة الفريق</div>
     <div class="page-sub">رقّي الناس وحدد كل واحد تابع لمين · إجمالي ${people.length} شخص</div></div></div>
     ${ME.role==='admin'?`<div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="font-size:13px;line-height:1.6">💾 <b>نسخة احتياطية</b><br><span style="color:var(--muted)">نزّل نسخة من كل بيانات السايت على جهازك. اعملها كل فترة عشان تأمّن شغلك.</span></div>
@@ -1815,6 +1815,10 @@ function manageView(){
     <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="font-size:13px;line-height:1.6">📢 <b>إعلان للفريق</b><br><span style="color:var(--muted)">اكتب رسالة تظهر لكل الفريق مرة واحدة أول ما يفتحوا السايت.</span></div>
       <button class="btn" style="height:38px;flex:none" onclick="openAnnounceEditor()">✏ اكتب إعلان</button>
+    </div>
+    <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="font-size:13px;line-height:1.6">🧪 <b>تجربة الجولة والتحديثات</b><br><span style="color:var(--muted)">رجّع الجولة التعليمية ورسائل أول الشهر كأنك بتفتح السايت لأول مرة (للتجربة).</span></div>
+      <button class="btn primary" style="height:38px;flex:none;background:var(--ready)" onclick="testLatestUpdate()">🔄 جرب الجولة دلوقتي</button>
     </div>`:''}`;
   if(people.length===0) return head+`<div class="empty"><div class="big">⚙</div>لسه محدش سجّل غيرك. ابعت لينك السايت لفريقك، وأول ما يعملوا حساب هيظهروا هنا تقدر ترقّيهم وتوزّعهم.</div>`;
   const card=p=>{
@@ -3102,7 +3106,13 @@ function wireApp(){
 document.getElementById('auGo').onclick=doAuth;
 document.getElementById('auPass').addEventListener('keydown',e=>{if(e.key==='Enter')doAuth();});
 document.getElementById('auToggle').onclick=toggleMode;
-
+window.testLatestUpdate = function() {
+    localStorage.removeItem('seen_report_tour_v6');
+    window.hasNaggedSession = false;
+    closeModal();
+    postLoadModals();
+    toast('تم إعادة ضبط الجولة بنجاح.. بتفتح دلوقتي! 🚀');
+};
 init();
 </script>
 </body>
