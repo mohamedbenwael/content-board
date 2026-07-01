@@ -2228,13 +2228,24 @@ window.backupNow=async function(btn){
   }catch(e){ toast('حصل خطأ في النسخة: '+(e.message||e),true); }
   if(btn){btn.disabled=false;btn.textContent=old;}
 };
-window.openReport=function(teacherId){
-  const t=T(teacherId), ym=reportMonth||ymNow(), r=getReport(teacherId,ym);
+window.openReport=function(teacherId, targetYm){
+  const ym = targetYm || reportMonth || ymNow();
+  const t = T(teacherId);
+  const r = getReport(teacherId, ym);
+  
+  // تجهيز قائمة الشهور (الشهر الحالي واللي قبله واللي قبله)
+  const months = [ymNow(), shiftYm(ymNow(), -1), shiftYm(ymNow(), -2)];
+  if (!months.includes(ym)) months.push(ym);
+  months.sort().reverse();
+  const monthOpts = months.map(m => `<option value="${m}" ${m===ym?'selected':''}>شهر ${ymLabel(m)}</option>`).join('');
+
   document.getElementById('mTitle').textContent=`تقرير أستاذ ${t.name}`;
   document.getElementById('mBody').innerHTML=`
     <div class="field" style="margin-bottom:14px">
-      <label>التقرير ده بيسجل أرقام شهر إيه؟</label>
-      <input disabled value="📊 شهر ${ymLabel(ym)}" style="background:var(--brand-dim);color:var(--brand);font-weight:900;text-align:center;font-size:15.5px;border:1px solid var(--brand)">
+      <label style="color:var(--danger);font-weight:900">التقرير ده بتاع شهر إيه؟ (اختار الصح)</label>
+      <select id="r_ym" onchange="openReport('${teacherId}', this.value)" style="border-color:var(--danger);font-weight:800;color:var(--brand)">
+        ${monthOpts}
+      </select>
     </div>
     <div class="lt-empty" style="margin-bottom:12px;font-size:12.5px;line-height:1.6">📤 السايت سجّل <b>${monthPosts(teacherId,ym)}</b> بوست منشور للمدرّس ده في الشهر ده. دخّل أرقام فيسبوك تحت:</div>
     <div class="two"><div class="field"><label>متابعين جداد +</label><input type="number" id="r_foll" value="${r?(r.new_followers||0):''}" placeholder="0"></div>
@@ -2244,22 +2255,24 @@ window.openReport=function(teacherId){
     <div style="text-align:center;color:var(--faint);font-size:12px;margin:-4px 0">— أو —</div>
     <div class="field"><label>الإثبات ② — ارفع ملف (صورة / PDF)</label><input type="file" id="r_file" accept="image/*,application/pdf">${r&&r.proof_file?`<a href="${escAttr(r.proof_file)}" target="_blank" style="font-size:12px;color:var(--brand)">📎 الملف المرفوع حاليًا</a>`:''}</div>
     <div class="lt-empty" style="margin:-2px 0 2px;font-size:11.5px">لازم تحط واحد منهم على الأقل — لينك أو ملف.</div>
-    <div class="field"><label>ملاحظات (اختياري)</label><input id="r_notes" value="${r?escAttr(r.notes||''):''}" placeholder="أي ملاحظة عن أداء الشهر…"></div>`;;
-  let acts=`<button class="btn primary" id="r_save">${r?'حفظ':'إضافة التقرير'}</button>`;
-  if(r)acts+=`<button class="danger-link" id="r_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
+    <div class="field"><label>ملاحظات (اختياري)</label><input id="r_notes" value="${r?escAttr(r.notes||''):''}" placeholder="أي ملاحظة عن أداء الشهر…"></div>`;
+    
+  let acts=`<button class="btn primary" id="r_save">${r?'حفظ التعديلات':'إضافة التقرير'}</button>`;
+  if(r)acts+=`<button class="danger-link" id="r_del" style="margin-inline-start:auto;background:none;border:none">مسح التقرير</button>`;
   document.getElementById('mFoot').innerHTML=acts;
+  
   document.getElementById('r_save').onclick=async()=>{
+    const selectedYm = document.getElementById('r_ym').value;
     let proofFile=r?r.proof_file:null;
     const f=document.getElementById('r_file').files[0];
     const linkVal=normUrl(val('r_link'));
-    // الإثبات إجباري: لازم لينك أو ملف (قديم أو جديد)
     if(!linkVal && !f && !proofFile){toast('لازم تحط إثبات: لينك أو ملف',true);return;}
-    if(f){toast('بيرفع الملف…');const url=await uploadReportFile(f,teacherId,ym);if(!url){return;}proofFile=url;}
-    const data={teacher_id:teacherId,ym,new_followers:+val('r_foll')||0,views:+val('r_views')||0,engagement:+val('r_eng')||0,
+    if(f){toast('بيرفع الملف…');const url=await uploadReportFile(f,teacherId,selectedYm);if(!url){return;}proofFile=url;}
+    const data={teacher_id:teacherId,ym:selectedYm,new_followers:+val('r_foll')||0,views:+val('r_views')||0,engagement:+val('r_eng')||0,
       proof_link:linkVal||null,proof_file:proofFile||null,notes:val('r_notes')||null,created_by:ME.id,updated_at:new Date().toISOString()};
     const {error}=await sb.from('monthly_reports').upsert(data,{onConflict:'teacher_id,ym'});
     if(error)return toast(error.message,true);
-    await reload();closeModal();render();toast('اتسجّل التقرير');
+    await reload();closeModal();render();toast('اتسجّل التقرير ✓');
   };
   if(r)document.getElementById('r_del').onclick=async()=>{if(confirm('تمسح التقرير؟')){await sb.from('monthly_reports').delete().eq('id',r.id);await reload();closeModal();render();toast('اتمسح');}};
   document.getElementById('overlay').classList.add('show');
