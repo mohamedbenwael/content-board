@@ -2372,22 +2372,19 @@ function postLoadModals(){
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
   if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
 
+  // 1. رسالة الزن (الأولوية القصوى - هتظهر الأول دايماً لو فيه تقارير ناقصة)
   const d = new Date();
-  let shouldShowTour = false;
+  if (d.getDate() <= 10 && !window.hasNaggedSession) {
+      checkAndShowNagModal();
+  }
 
+  // 2. الجولة التعليمية (بتظهر بعد رسالة الزن أو لو مفيش تقارير ناقصة)
   if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v8')) {
      const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
      const isThisMonth = ymNow() === '2026-07'; 
-     if (!(isThisMonth && isDelayedUser)) { shouldShowTour = true; }
-  }
-
-  if (shouldShowTour) {
-     openReportTourIntro();
-     return;
-  }
-
-  if (d.getDate() <= 10 && !window.hasNaggedSession) {
-      checkAndShowNagModal();
+     if (!(isThisMonth && isDelayedUser)) {
+         openReportTourIntro();
+     }
   }
 }
 
