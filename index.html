@@ -2365,26 +2365,37 @@ function checkUpdate(){
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
+// بيقرّر أنهي رسالة تظهر بعد الدخول
 function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
   if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
 
   const d = new Date();
+  let shouldShowTour = false;
 
-  // 1. جولة التقارير الجديدة (أول 10 أيام في الشهر بس)
-  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v6')) {
+  // 1. الجولة التفاعلية
+  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v8')) {
      const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
      const isThisMonth = ymNow() === '2026-07'; 
-     
      if (!(isThisMonth && isDelayedUser)) {
-         openReportTourIntro();
-         return;
+         shouldShowTour = true;
      }
   }
 
-  // 2. رسالة الزن بتاعة أول الشهر (أول 10 أيام بس)
+  if (shouldShowTour) {
+     openReportTourIntro();
+     return; // بيشغل الجولة ويقف هنا.. رسالة الزن هتشتغل لما الجولة تخلص
+  }
+
+  // 2. رسالة الزن (لو مفيش جولة)
   if (d.getDate() <= 10 && !window.hasNaggedSession) {
+      checkAndShowNagModal();
+  }
+}
+
+// دالة منفصلة لرسالة الزن عشان ننده عليها براحتنا
+window.checkAndShowNagModal = function() {
      const ymPrev = shiftYm(ymNow(), -1);
      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
      const exemptedTeachers = ["كريم فرعون", "الالفي", "سعيد الفقي"];
@@ -2405,19 +2416,12 @@ function postLoadModals(){
         window.hasNaggedSession = true; 
         openNagModal(ymPrev, missing);
      }
-  }
-}
+};
 
 window.openNagModal = function(ymPrev, missing) {
   document.getElementById('mTitle').textContent = '⚠️ تقارير الشهر اللي فات!';
-  document.getElementById('mBody').innerHTML = `
-    <div style="text-align:center;padding:10px 0">
-      <div style="font-size:44px;margin-bottom:10px">🚨</div>
-      <div style="font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)">نسيت تسجل تقارير شهر ${ymLabel(ymPrev)}!</div>
-      <div style="font-size:13.5px;color:var(--muted);line-height:1.6">عندك <b>${missing.length}</b> مدرسين لسه مسجلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.</div>
-      <div style="font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px">المدرسين: ${missing.map(t=>t.name).join('، ')}</div>
-    </div>`;
-  document.getElementById('mFoot').innerHTML = `<button class="btn" onclick="closeModal()" style="flex:1">هسجلها بعدين</button><button class="btn primary" id="go_rep_now" style="flex:2">يلا نسجلهم دلوقتي 🚀</button>`;
+  document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>🚨</div><div style='font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)'>نسيت تسجل تقارير شهر " + ymLabel(ymPrev) + "!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عندك <b>" + missing.length + "</b> مدرسين لسه مسجلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.</div><div style='font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px'>المدرسين: " + missing.map(t=>t.name).join('، ') + "</div></div>";
+  document.getElementById('mFoot').innerHTML = "<button class='btn' onclick='closeModal()' style='flex:1'>هسجلها بعدين</button><button class='btn primary' id='go_rep_now' style='flex:2'>يلا نسجلهم دلوقتي 🚀</button>";
   document.getElementById('go_rep_now').onclick = () => {
      closeModal(); view = 'reports'; reportMonth = ymPrev; render();
   };
@@ -2426,36 +2430,29 @@ window.openNagModal = function(ymPrev, missing) {
 
 window.openReportTourIntro = function() {
   document.getElementById('mTitle').textContent = 'جولة سريعة: إزاي تسجل تقاريرك؟ 🚀';
-  document.getElementById('mBody').innerHTML = `
-    <div style="text-align:center;padding:10px 0">
-      <div style="font-size:44px;margin-bottom:10px">📊</div>
-      <div style="font-size:17px;font-weight:900;margin-bottom:8px">التقارير بقت أسهل وأدق!</div>
-      <div style="font-size:13.5px;color:var(--muted);line-height:1.6">عشان التقييم يكون عادل، التقارير بقت بتطلب منك تحدد الشهر بالظبط. يلا ناخد جولة سريعة 30 ثانية نشوف بتتسجل إزاي عملي.</div>
-    </div>`;
-  document.getElementById('mFoot').innerHTML = `<button class="btn primary" id="start_rep_tour" style="flex:1">يلا نبدأ الجولة 🎯</button>`;
+  document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>📊</div><div style='font-size:17px;font-weight:900;margin-bottom:8px'>التقارير بقت أسهل وأدق!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عشان التقييم يكون عادل، التقارير بقت بتطلب منك تحدد الشهر بالظبط. يلا ناخد جولة سريعة 30 ثانية نشوف بتتسجل إزاي عملي.</div></div>";
+  document.getElementById('mFoot').innerHTML = "<button class='btn primary' id='start_rep_tour' style='flex:1'>يلا نبدأ الجولة 🎯</button>";
   document.getElementById('start_rep_tour').onclick = () => {
-     localStorage.setItem('seen_report_tour_v6', 'true');
+     localStorage.setItem('seen_report_tour_v8', 'true');
      closeModal();
      startReportMiniTour();
   };
   document.getElementById('overlay').classList.add('show');
 };
 
-// نظام جولة منفصل تماماً مبيضربش
+// --- نظام الجولة التفاعلية اللي بيشاور على العناصر ---
 let repTourStep = 0;
 let repTourTid = null;
 
 window.startReportMiniTour = function() {
   view = 'reports'; render();
-  
   setTimeout(() => {
       const firstBtn = document.querySelector('.rank-row .btn');
       if (!firstBtn) {
          toast('مفيش مدرسين معاك لسه نطبق عليهم عملي!');
-         setTimeout(postLoadModals, 1000);
+         setTimeout(checkAndShowNagModal, 1000);
          return;
       }
-      
       const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
       if(myTeachers.length > 0) repTourTid = myTeachers[0].id;
       
@@ -2473,7 +2470,7 @@ window.runRepTourStep = function() {
    
    if (repTourStep === 1) {
        const btn = document.querySelector('.rank-row .btn');
-       if(!btn) return endRepTour();
+       if(!btn) return endRepTourAndContinue();
        btn.scrollIntoView({block:'center', behavior:'smooth'});
        
        setTimeout(() => {
@@ -2483,10 +2480,7 @@ window.runRepTourStep = function() {
            spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
            
            pop.style.display='block';
-           pop.innerHTML=`<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p>
-              <div class="row">
-                 <div class="btns"><button class="primary" onclick="clickRepTourBtn()">👆 دوس على الزرار هنا</button></div>
-              </div>`;
+           pop.innerHTML = "<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p><div class='row'><div class='btns'><button class='primary' onclick='clickRepTourBtn()'>👆 دوس على الزرار هنا</button></div></div>";
            
            let pTop = r.bottom + 16;
            if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
@@ -2496,7 +2490,7 @@ window.runRepTourStep = function() {
    } 
    else if (repTourStep === 2) {
        const sel = document.getElementById('r_ym');
-       if(!sel) return endRepTour();
+       if(!sel) return endRepTourAndContinue();
        
        const r = sel.getBoundingClientRect();
        spot.style.display='block';
@@ -2504,10 +2498,7 @@ window.runRepTourStep = function() {
        spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
        
        pop.style.display='block';
-       pop.innerHTML=`<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p>
-          <div class="row">
-             <div class="btns"><button class="primary" onclick="endRepTourAndContinue()">فهمت، شكراً 👍</button></div>
-          </div>`;
+       pop.innerHTML = "<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p><div class='row'><div class='btns'><button class='primary' onclick='endRepTourAndContinue()'>فهمت، شكراً 👍</button></div></div>";
        
        pop.style.top=(r.bottom+16)+'px';
        pop.style.left=Math.max(10, r.left - 150)+'px';
@@ -2528,10 +2519,13 @@ window.clickRepTourBtn = function() {
 };
 
 window.endRepTourAndContinue = function() {
-   endRepTour();
-   setTimeout(postLoadModals, 600); 
+   document.getElementById('tourBackdrop').classList.remove('show');
+   document.getElementById('tourSpot').style.display='none';
+   document.getElementById('tourPop').style.display='none';
+   
+   // هنا رسالة الزن بتشتغل فوراً بعد ما الجولة التفاعلية تخلص!
+   setTimeout(checkAndShowNagModal, 600); 
 };
-
 window.endRepTour = function() {
    document.getElementById('tourBackdrop').classList.remove('show');
    document.getElementById('tourSpot').style.display='none';
