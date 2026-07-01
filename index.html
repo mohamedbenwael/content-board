@@ -2483,10 +2483,10 @@ window.runRepTourStep = function() {
            spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
            
            pop.style.display='block';
-           pop.innerHTML=\`<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p>
+           pop.innerHTML=`<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p>
               <div class="row">
                  <div class="btns"><button class="primary" onclick="clickRepTourBtn()">👆 دوس على الزرار هنا</button></div>
-              </div>\`;
+              </div>`;
            
            let pTop = r.bottom + 16;
            if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
@@ -2504,10 +2504,10 @@ window.runRepTourStep = function() {
        spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
        
        pop.style.display='block';
-       pop.innerHTML=\`<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p>
+       pop.innerHTML=`<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p>
           <div class="row">
              <div class="btns"><button class="primary" onclick="endRepTourAndContinue()">فهمت، شكراً 👍</button></div>
-          </div>\`;
+          </div>`;
        
        pop.style.top=(r.bottom+16)+'px';
        pop.style.left=Math.max(10, r.left - 150)+'px';
@@ -2521,7 +2521,7 @@ window.clickRepTourBtn = function() {
    if(repTourTid) {
        openReport(repTourTid);
        repTourStep = 2;
-       setTimeout(runRepTourStep, 500); // استنى النافذة تفتح
+       setTimeout(runRepTourStep, 500); 
    } else {
        endRepTourAndContinue();
    }
@@ -2529,7 +2529,13 @@ window.clickRepTourBtn = function() {
 
 window.endRepTourAndContinue = function() {
    endRepTour();
-   setTimeout(postLoadModals, 600); // يكمل ويشوف رسالة الزن لو محتاج
+   setTimeout(postLoadModals, 600); 
+};
+
+window.endRepTour = function() {
+   document.getElementById('tourBackdrop').classList.remove('show');
+   document.getElementById('tourSpot').style.display='none';
+   document.getElementById('tourPop').style.display='none';
 };
 
 window.endRepTour = function() {
