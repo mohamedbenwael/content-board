@@ -2361,7 +2361,118 @@ function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
   if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
+
+  // 1. جولة التقارير الجديدة (بتظهر مرة واحدة بس في العمر)
+  if (!localStorage.getItem('seen_report_tour_v1')) {
+     openReportTourIntro();
+     return;
+  }
+
+  // 2. رسالة الزن بتاعة أول الشهر (بتظهر أول 10 أيام في الشهر لو مفيش تقرير)
+  const d = new Date();
+  if (d.getDate() <= 10 && !window.hasNaggedSession) {
+     const ymPrev = shiftYm(ymNow(), -1);
+     const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
+     const missing = myTeachers.filter(t => !getReport(t.id, ymPrev));
+     if (missing.length > 0) {
+        window.hasNaggedSession = true; // عشان تظهر مرة واحدة في الجلسة مش كل شوية
+        openNagModal(ymPrev, missing);
+     }
+  }
 }
+
+window.openNagModal = function(ymPrev, missing) {
+  document.getElementById('mTitle').textContent = '⚠️ تقارير الشهر اللي فات!';
+  document.getElementById('mBody').innerHTML = `
+    <div style="text-align:center;padding:10px 0">
+      <div style="font-size:44px;margin-bottom:10px">🚨</div>
+      <div style="font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)">نسيت تسجل تقارير شهر ${ymLabel(ymPrev)}!</div>
+      <div style="font-size:13.5px;color:var(--muted);line-height:1.6">عندك <b>${missing.length}</b> مدرسين لسه مسجلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.</div>
+      <div style="font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px">المدرسين: ${missing.map(t=>t.name).join('، ')}</div>
+    </div>`;
+  document.getElementById('mFoot').innerHTML = `<button class="btn" onclick="closeModal()" style="flex:1">هسجلها بعدين</button><button class="btn primary" id="go_rep_now" style="flex:2">يلا نسجلهم دلوقتي 🚀</button>`;
+  document.getElementById('go_rep_now').onclick = () => {
+     closeModal();
+     view = 'reports';
+     reportMonth = ymPrev;
+     render();
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+
+window.openReportTourIntro = function() {
+  document.getElementById('mTitle').textContent = 'جولة سريعة: إزاي تسجل تقاريرك؟ 🚀';
+  document.getElementById('mBody').innerHTML = `
+    <div style="text-align:center;padding:10px 0">
+      <div style="font-size:44px;margin-bottom:10px">📊</div>
+      <div style="font-size:17px;font-weight:900;margin-bottom:8px">التقارير بقت أسهل وأدق!</div>
+      <div style="font-size:13.5px;color:var(--muted);line-height:1.6">عشان التقييم يكون عادل، التقارير بقت بتطلب منك تحدد الشهر بالظبط. يلا ناخد جولة سريعة 30 ثانية نشوف بتتسجل إزاي عملي.</div>
+    </div>`;
+  document.getElementById('mFoot').innerHTML = `<button class="btn primary" id="start_rep_tour" style="flex:1">يلا نبدأ الجولة 🎯</button>`;
+  document.getElementById('start_rep_tour').onclick = () => {
+     localStorage.setItem('seen_report_tour_v1', 'true'); // عشان ماتظهرش تاني أبداً
+     closeModal();
+     startReportMiniTour();
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+
+let isReportTour = false;
+const origNextTour = window.nextTour;
+const origEndTour = window.endTour;
+
+// تعديل ذكي للجولة عشان تفتح النافذة بنفسها
+window.nextTour = function() {
+  if(!isReportTour) { origNextTour(); return; }
+  clearTourEl();
+  tourIdx++;
+  if (tourIdx === 2) {
+     const firstBtn = document.querySelector('.rank-row .btn');
+     if(firstBtn) {
+        firstBtn.click(); // السايت بيدوس على الزرار بنفسه!
+        setTimeout(() => {
+           tourList.push({ sel:'#r_ym', title:'أهم خطوة: اختار الشهر! ⚠️', text:'القايمة دي بتسألك التقرير ده بتاع شهر إيه. اتأكد إنك مختار الشهر الصح قبل ما تكتب أي رقم.' });
+           tourList.push({ sel:'#r_save', title:'حفظ التقرير', text:'بعد ما تدخل الأرقام والإثبات، دوس حفظ. وكده مبروك التقفيلة! 🎉' });
+           showTourStep();
+        }, 350); // استنى النافذة تفتح
+     } else {
+         endTour();
+     }
+     return;
+  }
+  if (tourIdx >= tourList.length) {
+     endTour();
+     return;
+  }
+  showTourStep();
+};
+
+window.endTour = function() {
+  origEndTour();
+  if(isReportTour) {
+     isReportTour = false;
+     setTimeout(postLoadModals, 600); // يشغل رسالة الزن لو محتاج بعد الجولة
+  }
+};
+
+window.startReportMiniTour = function() {
+  view = 'reports';
+  render();
+  const firstBtn = document.querySelector('.rank-row .btn');
+  if (!firstBtn) {
+     toast('جولة التقارير: مفيش مدرسين معاك لسه نطبق عليهم عملي!');
+     setTimeout(postLoadModals, 1000);
+     return;
+  }
+  isReportTour = true;
+  tourList = [
+    {sel:'[data-view="reports"]', title:'صفحة التقارير 📊', text:'هنا بتقدر تتابع وتسجل أرقام كل مدرس بتمسكه.'},
+    {sel:'.rank-row .btn', title:'إضافة تقرير', text:'هندوس على زرار (إضافة تقرير) ده عشان نفتح النافذة.'}
+  ];
+  tourIdx = 0;
+  document.getElementById('tourBackdrop').classList.add('show');
+  showTourStep();
+};
 window.openAnnounce=function(){
   if(!ANNOUNCE)return;
   document.getElementById('mTitle').textContent='📢 إعلان للفريق';
