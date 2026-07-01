@@ -435,17 +435,35 @@ function teacherCatCounts(teacherId, fromYmd, toYmd){
   });
   return counts;
 }
-// فحص التزام مدرّس في أسبوع معيّن — يرجّع {counts, issues:[{rule,count,kind:'over'|'under'}]}
+// فحص التزام مدرّس في أسبوع معيّن — ذكي حسب اليوم
+// لكل قاعدة بنرجّع status: 'ok' | 'over' (زيادة) | 'under' (نقص فعلي آخر الأسبوع) | 'pending' (لسه بيكمّل)
 function teacherWeekCompliance(teacherId, refDate){
-  const fromYmd=ymd(weekStart(refDate)), toYmd=ymd(weekEnd(refDate));
+  const ws=weekStart(refDate), we=weekEnd(refDate);
+  const fromYmd=ymd(ws), toYmd=ymd(we);
   const counts=teacherCatCounts(teacherId, fromYmd, toYmd);
-  const issues=[];
-  COMPLIANCE_RULES.forEach(r=>{
+  // كام يوم عدّى من الأسبوع وكام فاضل (بالنسبة للنهاردة)
+  const today=new Date(); today.setHours(23,59,59,999);
+  const isPast = we < new Date(new Date().setHours(0,0,0,0)); // أسبوع خلص خالص
+  const dayIdx = Math.min(6, Math.max(0, Math.floor((today - ws)/864e5))); // 0..6 (النهاردة رقم كام في الأسبوع)
+  const daysLeft = isPast ? 0 : Math.max(0, 6 - dayIdx); // أيام فاضلة في الأسبوع
+  // «آخر الأسبوع» = الأسبوع خلص، أو فاضل يوم واحد أو أقل
+  const weekEnding = isPast || daysLeft<=1;
+  const rules=COMPLIANCE_RULES.map(r=>{
     const got=counts[r.cat]||0;
-    if(r.type==='max' && got>r.n) issues.push({rule:r, count:got, kind:'over'});
-    if(r.type==='min' && got<r.n) issues.push({rule:r, count:got, kind:'under'});
+    let status='ok';
+    if(r.type==='max'){
+      if(got>r.n) status='over';                       // سقف: تحذير أي وقت
+    } else { // min
+      if(got>=r.n) status='ok';
+      else if(weekEnding) status='under';              // نقص فعلي: بس آخر الأسبوع
+      else status='pending';                           // لسه بيكمّل
+    }
+    return {rule:r, got, status, daysLeft};
   });
-  return {counts, issues, from:fromYmd, to:toYmd};
+  // «issues» = مشاكل حقيقية بس (over أو under) — الـpending مش مشكلة
+  const issues=rules.filter(x=>x.status==='over'||x.status==='under')
+                    .map(x=>({rule:x.rule, count:x.got, kind:x.status}));
+  return {counts, rules, issues, from:fromYmd, to:toYmd, daysLeft, weekEnding, isPast};
 }
 const REEL_TYPES=[{id:'youtube',name:'يوتيوب'},{id:'hall',name:'قاعة'},{id:'studio',name:'استوديو'}];
 const TASK_TYPES=['طلب ديزاين','طلب فيديو','خطة','مراجعة','تصوير','أخرى'];
@@ -474,6 +492,7 @@ const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A'
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
 let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
 let complianceWeek='cur'; // 'cur' | 'prev' — أسبوع تنبيهات الالتزام
+let rankMonth=null; // شهر التقييم المعروض (افتراضي: الشهر اللي فات)
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
 let TREVIEWS=[]; // تقييمات متابعة المدرّسين
 const TR_CRITERIA=[{k:'reply',name:'سرعة الرد',ico:'⚡'},{k:'satis',name:'رضا المدرّس',ico:'😀'},{k:'comm',name:'التواصل',ico:'🤝'},{k:'exec',name:'تنفيذ الطلبات',ico:'✅'}];
@@ -675,16 +694,21 @@ function isLate(c){const done=(c.kind==='task')?(c.status==='done'):(c.status===
 function monthStart(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);}
 function ymd(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);}
 // الأيام المطلوب فيها نشر للمدرّس — من تاريخ الإسناد أو أول الشهر (الأحدث) لحد إمبارح
-function expectedDays(teacher){
-  const days=[]; const today=new Date(); today.setHours(0,0,0,0);
-  // كل الأيام مطلوبة — مفيش يوم راحة ثابت (السماح بيتطبّق أسبوعيًا في العدّ)
-  let start=new Date(monthStart());
+function monthStartOf(ym){ if(!ym) return monthStart(); const [y,m]=ym.split('-').map(Number); return new Date(y,m-1,1); }
+function expectedDays(teacher, ym){
+  ym = ym || ymNow();
+  const days=[];
+  let start=new Date(monthStartOf(ym));
   if(teacher.assigned_at){
     const a=new Date(teacher.assigned_at+'T00:00:00');
     if(a>start) start=a;
   }
+  // نهاية الفترة: الشهر الحالي لحد إمبارح · الشهر الفايت = الشهر كله
+  let end;
+  if(ym===ymNow()){ end=new Date(); end.setHours(0,0,0,0); }
+  else { const [y,m]=ym.split('-').map(Number); end=new Date(y,m,1); }
   let d=new Date(start);
-  while(d < today){
+  while(d < end){
     days.push(ymd(d));
     d=new Date(d); d.setDate(d.getDate()+1);
   }
@@ -693,59 +717,60 @@ function expectedDays(teacher){
 // مفتاح الأسبوع (بيبدأ السبت)
 function weekKeySat(ds){const d=new Date(ds+'T00:00:00'); const off=(d.getDay()+1)%7; d.setDate(d.getDate()-off); return ymd(d);}
 // أول يوم فايت في كل أسبوع بيتسامح (إجازة مرنة) — بنرجّع مجموعة الأيام المسموح بيها
-function forgivenDaysForTeacher(teacherId){
-  const raw=missedDaysForTeacher(teacherId).slice().sort();
+function forgivenDaysForTeacher(teacherId, ym){
+  const raw=missedDaysForTeacher(teacherId, ym).slice().sort();
   const seen=new Set(), forgiven=new Set();
   raw.forEach(ds=>{const wk=weekKeySat(ds); if(!seen.has(wk)){seen.add(wk); forgiven.add(ds);}}); // أول يوم فايت في الأسبوع
   return forgiven;
 }
-function teacherMissInfo(teacherId){
-  const raw=missedDaysForTeacher(teacherId).length;
-  const forgiven=forgivenDaysForTeacher(teacherId).size;
+function teacherMissInfo(teacherId, ym){
+  const raw=missedDaysForTeacher(teacherId, ym).length;
+  const forgiven=forgivenDaysForTeacher(teacherId, ym).size;
   return {raw, forgiven, counted:Math.max(0,raw-forgiven)};
 }
 // أيام نزل فيها فعلاً نشر للمدرّس (من السجل، الشهر الحالي)
-function publishedDays(teacherId){
-  const ms=ymd(monthStart());
-  return new Set(PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=ms).map(l=>l.pub_date));
+function publishedDays(teacherId, ym){
+  ym = ym || ymNow();
+  return new Set(PUBLOG.filter(l=>l.teacher_id===teacherId && (l.pub_date||'').slice(0,7)===ym).map(l=>l.pub_date));
 }
 // الأيام الفايتة لمدرّس (مطلوبة وما نزلش فيها)
-function missedDaysForTeacher(teacherId){
+function missedDaysForTeacher(teacherId, ym){
   const t=T(teacherId); if(!t||!t.id) return [];
-  const done=publishedDays(teacherId);
-  return expectedDays(t).filter(d=>!done.has(d));
+  const done=publishedDays(teacherId, ym);
+  return expectedDays(t, ym).filter(d=>!done.has(d));
 }
 // إجمالي بوستات الشهر لمدرّس
-function teacherPosts(teacherId){
-  const ms=ymd(monthStart());
-  return PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=ms).length;
+function teacherPosts(teacherId, ym){
+  ym = ym || ymNow();
+  return PUBLOG.filter(l=>l.teacher_id===teacherId && (l.pub_date||'').slice(0,7)===ym).length;
 }
 // إجمالي بوستات العضو الشهر (كل مدرّسينه)
-function memberPosts(memberId){
-  const ms=ymd(monthStart());
-  return PUBLOG.filter(l=>l.member_id===memberId && l.pub_date>=ms).length;
+function memberPosts(memberId, ym){
+  ym = ym || ymNow();
+  return PUBLOG.filter(l=>l.member_id===memberId && (l.pub_date||'').slice(0,7)===ym).length;
 }
 // إجمالي الأيام الفايتة المحتسبة (بعد سماح يوم/أسبوع) عبر كل مدرّسين العضو
-function memberMissed(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id).counted,0);
+function memberMissed(memberId, ym){
+  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id, ym).counted,0);
 }
-function memberForgiven(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id).forgiven,0);
+function memberForgiven(memberId, ym){
+  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id, ym).forgiven,0);
 }
 function memberTeacherBreakdown(memberId){
   return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
 }
 // متوسط جودة شغل العضو الشهر ده (من تقييم القائد) — 0..1 أو null لو مفيش تقييمات
-function memberQuality(memberId){
-  const rated=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post' && c.quality && (c.created_at||'').slice(0,7)===ymNow());
+function memberQuality(memberId, ym){
+  ym = ym || ymNow();
+  const rated=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post' && c.quality && (c.created_at||'').slice(0,7)===ym);
   if(!rated.length) return null;
   const avg=rated.reduce((s,c)=>s+c.quality,0)/rated.length;
   return (avg-1)/3; // سيء(1)=0 .. ممتاز(4)=1
 }
 // نمو الصفحة: مقارنة أرقام الشهر الحالي بالشهر اللي فات (%) — 0..1 أو null
 // بيقيس التحسن النسبي مش الأرقام الخام عشان يكون عادل بين الصفحات الكبيرة والصغيرة
-function memberGrowthScore(memberId){
-  const curYm=ymNow(), prevYm=shiftYm(curYm,-1);
+function memberGrowthScore(memberId, ym){
+  const curYm=ym||ymNow(), prevYm=shiftYm(curYm,-1);
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
   const cur={f:0,v:0,e:0,n:0}, prev={f:0,v:0,e:0,n:0};
   ts.forEach(t=>{
@@ -766,16 +791,20 @@ function memberGrowthScore(memberId){
 }
 // balance الأسابيع المكتملة في الشهر الحالي — 0..1 أو null
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
-function memberBalanceScore(memberId){
+function memberBalanceScore(memberId, ym){
+  ym = ym || ymNow();
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
   if(!ts.length) return null;
-  const today=new Date(), mStart=monthStart();
+  const mStart=monthStartOf(ym);
+  const [yy,mm]=ym.split('-').map(Number);
+  const monthEnd=new Date(yy,mm,1); // أول الشهر اللي بعده (حصري)
+  const cutoff = (ym===ymNow()) ? new Date() : monthEnd; // الحالي: لحد النهاردة · الفايت: الشهر كله
   const completed=[];
   let d=new Date(mStart);
   while(d.getDay()!==6) d.setDate(d.getDate()+1);
-  while(d<=today){
+  while(d<monthEnd){
     const fri=new Date(d); fri.setDate(d.getDate()+6);
-    if(fri<today) completed.push(new Date(d));
+    if(fri<cutoff) completed.push(new Date(d));
     d.setDate(d.getDate()+7);
   }
   if(!completed.length) return null;
@@ -799,32 +828,34 @@ function memberManageScore(memberId){
   const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
   return (avg-1)/2; // سيء(1)=0 .. كويس(3)=1
 }
-// نقطة تقييم العضو: انتظام 30٪ + balance 25٪ + جودة 25٪ + نمو الصفحة 20٪
-// (إعادة توزيع تلقائي لو مكوّن مش متاح لعضو جديد)
-function memberScore(memberId){
-  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t).length,0);
-  const forgiven=memberForgiven(memberId);
+// نقطة تقييم العضو: انتظام 35٪ + balance 30٪ + جودة 20٪ + نمو الصفحة 15٪
+// (الوزن الأكبر للحاجات اللي بإيد الموظف مباشرة · إعادة توزيع تلقائي لو مكوّن مش متاح)
+function memberScore(memberId, ym){
+  ym = ym || ymNow();
+  const isCur = (ym===ymNow());
+  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t, ym).length,0);
+  const forgiven=memberForgiven(memberId, ym);
   const expectedTotal=Math.max(0,expectedRaw-forgiven);
-  const posts=memberPosts(memberId);
-  const missed=memberMissed(memberId);
+  const posts=memberPosts(memberId, ym);
+  const missed=memberMissed(memberId, ym);
   const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; // انتظام النزول
   
-  // تعديل الـ balance عشان مايتحسبش غير آخر الأسبوع
+  // الحالي: balance مايتحسبش غير آخر الأسبوع · الفايت: بيتحسب كامل
   const isWeekEnded = new Date().getDay() >= 5;
-  const bScore= isWeekEnded ? memberBalanceScore(memberId) : null;   // balance الأسابيع المكتملة
+  const bScore= (!isCur || isWeekEnded) ? memberBalanceScore(memberId, ym) : null;
   
-  const qScore=memberQuality(memberId);        // جودة (تقييم القائد)
-  const gScore=memberGrowthScore(memberId);    // نمو % مقارنة بالشهر اللي فات
+  const qScore=memberQuality(memberId, ym);        // جودة (تقييم القائد)
+  const gScore=memberGrowthScore(memberId, ym);    // نمو % مقارنة بالشهر اللي فات
   
   if(pScore===null && bScore===null && qScore===null && gScore===null && posts<1)
     return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null};
   
   // إعادة توزيع الأوزان على المكوّنات المتاحة فقط
   const parts=[];
-  if(pScore!==null) parts.push([pScore,.30]);
-  if(bScore!==null) parts.push([bScore,.25]);
-  if(qScore!==null) parts.push([qScore,.25]);
-  if(gScore!==null) parts.push([gScore,.20]);
+  if(pScore!==null) parts.push([pScore,.35]);
+  if(bScore!==null) parts.push([bScore,.30]);
+  if(qScore!==null) parts.push([qScore,.20]);
+  if(gScore!==null) parts.push([gScore,.15]);
   
   const totW=parts.reduce((s,p)=>s+p[1],0)||1;
   const score=Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/totW*100);
@@ -892,18 +923,18 @@ function descendantsOf(personId){
   return [...out];
 }
 // متوسط نقط المسؤولين المباشرين تحت شخص (الليدر→أعضاؤه، المانجر→التيم ليدرز اللي تحته)
-function teamAvgScore(personId){
+function teamAvgScore(personId, ym){
   const kids=PROFILES.filter(p=>p.lead_id===personId && p.active!==false);
-  const scores=kids.map(k=>scoreFor(k.id).score).filter(s=>s!==null);
+  const scores=kids.map(k=>scoreFor(k.id, ym).score).filter(s=>s!==null);
   if(!scores.length) return null;
   return Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
 }
 // نقطة أي شخص حسب دوره: عضو=شغله / ليدر=شغله50+فريقه50 / مانجر=فريقه100
-function scoreFor(personId){
+function scoreFor(personId, ym){
   const u=U(personId);
-  if(u.role==='member') return memberScore(personId);
+  if(u.role==='member') return memberScore(personId, ym);
   if(u.role==='lead'){
-    const own=memberScore(personId).score, team=teamAvgScore(personId);
+    const own=memberScore(personId, ym).score, team=teamAvgScore(personId, ym);
     let score;
     if(own!==null && team!==null) score=Math.round(own*0.5+team*0.5);
     else if(own!==null) score=own;
@@ -912,7 +943,7 @@ function scoreFor(personId){
     return {score, own, team, role:'lead'};
   }
   if(u.role==='manager'){
-    const team=teamAvgScore(personId);
+    const team=teamAvgScore(personId, ym);
     return {score:team, own:null, team, role:'manager'};
   }
   return {score:null};
@@ -1536,53 +1567,61 @@ function lateView(){
 /* ---------- التقييم والترتيب + متابعة النشر ---------- */
 let rankTab='members', rankBy='score';
 function memberResults(id,ym){let f=0,v=0,e=0;TEACHERS.filter(t=>t.owner_id===id).forEach(t=>{const r=getReport(t.id,ym);if(r){f+=r.new_followers||0;v+=+r.views||0;e+=+r.engagement||0;}});return {f,v,e};}
-function rankGroup(role){
-  let rows=PROFILES.filter(p=>p.role===role&&p.active!==false).map(p=>({id:p.id,...scoreFor(p.id)}));
+function rankGroup(role, ym){
+  let rows=PROFILES.filter(p=>p.role===role&&p.active!==false).map(p=>({id:p.id,...scoreFor(p.id, ym)}));
   rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
   rows.forEach((r,i)=>r._pos=i+1);
   return rows;
 }
 const ROLE_GROUPS=[['member','🧑‍💻 الأعضاء'],['lead','🎖 التيم ليدرز'],['manager','📊 الأكونت مانجرز']];
-function myScoreCard(){
+function myScoreCard(ym){
   if(ME.role!=='member') return '';
-  const rows=rankGroup('member'); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
+  const rows=rankGroup('member', ym); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
   const sc=me.score, col=sc===null?'var(--faint)':scoreColor(sc);
   const breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
       ${me.postingPct!=null?`<span>🗓 انتظام ${me.postingPct}٪</span>`:''}
-      ${me.balancePct!=null?`<span>⚖️ balance ${me.balancePct}٪</span>`:''}
+      ${me.balancePct!=null?`<span>⚖️ توازن ${me.balancePct}٪</span>`:'<span style="color:var(--faint)">⚖️ توازن لسه</span>'}
       ${me.qualityPct!=null?`<span>💡 جودة ${me.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمتش</span>'}
-      ${me.growthPct!=null?`<span>📈 نمو ${me.growthPct}٪</span>`:''}</div>`;
+      ${me.growthPct!=null?`<span>📈 نمو ${me.growthPct}٪</span>`:'<span style="color:var(--faint)">📈 نمو لسه</span>'}</div>`;
   const tier=scoreTier(sc);
   return `<div class="lt-empty" style="text-align:center;margin-bottom:18px;padding:18px">
-    <div style="font-size:13px;color:var(--muted)">تقييمك الشهر ده</div>
+    <div style="font-size:13px;color:var(--muted)">تقييمك — ${ymLabel(ym||ymNow())}</div>
     <div style="display:inline-flex;align-items:center;gap:6px;background:${tier.color}22;color:${tier.color};font-weight:800;font-size:14px;padding:5px 14px;border-radius:20px;margin:8px 0 2px">${tier.ico} ${tier.name}</div>
     <div style="font-size:44px;font-weight:900;color:${col};line-height:1.1;margin:2px 0">${sc===null?'—':sc}</div>
     <div style="font-size:13px;color:var(--muted)">${sc===null?'لسه بتتقيّم':'من ١٠٠'} · ترتيبك <b style="color:var(--brand)">${me._pos}</b> من ${rows.length} في كل الموظفين</div>
     ${breakdown}</div>`;
 }
 function rankView(){
-  const monthName=new Date().toLocaleDateString('ar-EG',{month:'long'});
+  if(!rankMonth) rankMonth=shiftYm(ymNow(),-1); // افتراضي: الشهر اللي فات
+  const ym=rankMonth;
   const isMember=ME.role==='member';
+  const monthNav=`<div class="week-nav" style="margin-bottom:16px">
+      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
+      <span class="label" style="font-weight:800;font-size:15px">${ymLabel(ym)}</span>
+      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',1);render()" ${ym>=ymNow()?'disabled style=\"width:auto;padding:0 14px;font-size:13px;opacity:.4\"':'style=\"width:auto;padding:0 14px;font-size:13px\"'}>الشهر التالي ›</button>
+      ${ym!==ymNow()?`<button onclick="rankMonth='${ymNow()}';render()" style="width:auto;padding:0 14px;font-size:13px">الشهر ده</button>`:''}
+    </div>`;
+  const liveNote = ym===ymNow() ? `<div class="lt-empty" style="margin-bottom:14px;font-size:12px">⏳ الشهر ده لسه شغّال — الأرقام بتتغيّر لحد آخر الشهر. للتقييم النهائي بُص على الشهر اللي فات.</div>` : '';
   const head=`<div class="page-head"><div><div class="page-title">التقييم والترتيب</div>
-    <div class="page-sub">شغل شهر ${monthName} · جودة ٤٠٪ + المدرّس ٢٠٪ + النزول ٢٠٪ + التقرير ٢٠٪</div></div></div>
-    ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard():''}
+    <div class="page-sub">انتظام النزول ٣٥٪ + التوازن ٣٠٪ + جودة الشغل ٢٠٪ + نمو الصفحة ١٥٪</div></div></div>
+    ${monthNav}${liveNote}
+    ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard(ym):''}
     ${!isMember?`<div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
       <button class="${rankTab==='teams'?'on':''}" onclick="rankTab='teams';render()">🏆 ترتيب التيمات</button>
       <button class="${rankTab==='teachers'?'on':''}" onclick="rankTab='teachers';render()">متابعة المدرّسين</button>
     </div>`:''}`;
-  if(isMember) return head + membersRank();
-  return head + (rankTab==='members'? membersRank() : rankTab==='teams'? teamsRank() : teachersTracking());
+  if(isMember) return head + membersRank(ym);
+  return head + (rankTab==='members'? membersRank(ym) : rankTab==='teams'? teamsRank(ym) : teachersTracking(ym));
 }
 function rankSubLine(r) {
   const u = U(r.id);
-  const isWeekEnded = new Date().getDay() >= 5;
   return `<div class="sub">
     ${u.role === 'member' ? `
       ${r.postingPct != null ? `<span>🗓 انتظام ${r.postingPct}٪</span>` : ''}
-      ${(isWeekEnded && r.balancePct != null) ? `<span>⚖️ balance ${r.balancePct}٪</span>` : ''}
+      ${r.balancePct != null ? `<span>⚖️ توازن ${r.balancePct}٪</span>` : '<span style="color:var(--faint)">⚖️ توازن لسه</span>'}
       ${r.qualityPct != null ? `<span>💡 جودة ${r.qualityPct}٪</span>` : '<span style="color:var(--faint)">💡 لسه ماتقيّمش</span>'}
-      ${r.growthPct != null ? `<span>📈 نمو ${r.growthPct}٪</span>` : ''}
+      ${r.growthPct != null ? `<span>📈 نمو ${r.growthPct}٪</span>` : '<span style="color:var(--faint)">📈 نمو لسه</span>'}
     ` : `
       <span style="color:var(--brand)">${u.role === 'manager' ? 'أكونت مانجر' : 'تيم ليدر'}</span>
       ${r.own != null ? `<span>👤 شغله ${r.own}</span>` : ''}
@@ -1601,10 +1640,10 @@ function rankRowHTML(r,pos,plain){
     <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'⏳ لسه':tier.ico+' '+tier.name}</div></div>
   </div>`;
 }
-function membersRank(){
+function membersRank(ym){
   // العضو: التوب 3 (كل الموظفين) + تيمه + ترتيبه العام
   if(ME.role==='member'){
-    const rows=rankGroup('member');
+    const rows=rankGroup('member', ym);
     if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش موظفين.</div>`;
     const me=rows.find(r=>r.id===ME.id), top3=rows.slice(0,3);
     let html=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13px;font-weight:800">🏆 أوائل الشركة</div>`;
@@ -1620,7 +1659,7 @@ function membersRank(){
     return html;
   }
   // القادة والأدمن: ترتيب كل الموظفين (الأعضاء بس)
-  const rows=rankGroup('member');
+  const rows=rankGroup('member', ym);
   if(!rows.length) return `<div class="empty"><div class="big">★</div>لسه مفيش موظفين بشغل.</div>`;
   const active=rows.filter(r=>r.score!==null), pending=rows.filter(r=>r.score===null);
   let out=`<div class="nav-group-label" style="margin:4px 4px 10px;font-size:13.5px;font-weight:800">🧑‍💻 ترتيب الموظفين <span style="color:var(--faint)">(${active.length})</span></div>`;
@@ -1632,12 +1671,12 @@ function membersRank(){
   return out;
 }
 // ترتيب التيمات: كل تيم ليدر + أعضاؤه = تيم
-function teamsRank(){
+function teamsRank(ym){
   const leads=PROFILES.filter(p=>p.role==='lead'&&p.active!==false);
   if(!leads.length) return `<div class="empty"><div class="big">🏆</div>لسه مفيش تيمات. لما تحدّد تيم ليدرز وأعضاء، هتظهر ترتيبات التيمات هنا.</div>`;
   let rows=leads.map(l=>{
     const memberCount=PROFILES.filter(p=>p.lead_id===l.id&&p.role==='member'&&p.active!==false).length;
-    return {id:l.id, name:l.name, score:teamAvgScore(l.id), memberCount};
+    return {id:l.id, name:l.name, score:teamAvgScore(l.id, ym), memberCount};
   });
   rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
   return rows.map((r,i)=>{
@@ -1656,15 +1695,17 @@ function scoreTier(s){
   if(s===null||s===undefined) return {name:'لسه بيتقيّم', color:'var(--faint)', ico:'⏳'};
   if(s>=85) return {name:'ممتاز', color:'var(--ready)', ico:'⭐'};
   if(s>=70) return {name:'كويس جدًا', color:'#3B82C4', ico:'💪'};
-  if(s>=50) return {name:'كويس', color:'var(--doing)', ico:'👍'};
+  if(s>=55) return {name:'كويس', color:'var(--doing)', ico:'👍'};
+  if(s>=40) return {name:'متوسط', color:'#C2691C', ico:'⚠️'};
   return {name:'محتاج تحسين', color:'var(--danger)', ico:'📈'};
 }
-function teachersTracking(){
+function teachersTracking(ym){
+  ym = ym || ymNow();
   const ids=scopeIds();
   const ts=TEACHERS.filter(t=>ids.includes(t.owner_id));
   if(ts.length===0) return `<div class="empty"><div class="big">📅</div>مفيش مدرّسين لسه.</div>`;
   return `<div class="grid3">${ts.map(t=>{
-    const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted, owner=U(t.owner_id);
+    const posts=teacherPosts(t.id, ym), missed=teacherMissInfo(t.id, ym).counted, owner=U(t.owner_id);
     const canRate = ME.role!=='member' && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id));
     const rev=getTReview(t.id,shiftYm(ymNow(),-1));
     const revLine = rev
@@ -2011,32 +2052,46 @@ function weekLabel(refDate){
   return `${f(s)} → ${f(e)}`;
 }
 function complianceCard(t, refDate, showName){
-  const {counts, issues}=teacherWeekCompliance(t.id, refDate);
+  const cur=teacherWeekCompliance(t.id, refDate);
   const owner=U(t.owner_id);
-  const chips=COMPLIANCE_RULES.map(r=>{
-    const got=counts[r.cat]||0;
-    const bad=issues.find(i=>i.rule.cat===r.cat);
-    const col=bad?(bad.kind==='over'?'var(--danger)':'var(--danger)'):'var(--ready)';
-    const sign=r.type==='max'?`/${r.n} حد أقصى`:`/${r.n} حد أدنى`;
-    return `<div style="text-align:center;min-width:64px">
-      <div style="font-weight:900;font-size:17px;color:${col}">${got}</div>
-      <div style="font-size:10px;color:var(--faint)">${r.ico} ${r.label} ${sign}</div></div>`;
+  const COL={ok:'var(--ready)', over:'var(--doing)', under:'var(--danger)', pending:'var(--pub)'};
+  const rows=cur.rules.map(x=>{
+    const r=x.rule, col=COL[x.status];
+    const pct=Math.max(6, Math.min(100, Math.round((x.got/r.n)*100)));
+    let note;
+    if(r.type==='max'){
+      note = x.status==='over' ? `زادت (الحد ${r.n})` : `تمام (الحد الأقصى ${r.n})`;
+    } else {
+      note = x.status==='ok' ? `اكتمل ✓`
+           : x.status==='under' ? `ناقص (المطلوب ${r.n})`
+           : `لسه بيكمّل · باقي ${x.daysLeft} ${x.daysLeft===1?'يوم':'أيام'}`;
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;margin-top:9px">
+      <div style="width:74px;flex:none;font-size:11.5px;color:var(--muted)">${r.ico} ${r.label}</div>
+      <div style="flex:1;height:8px;border-radius:6px;background:var(--brand-dim);overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${col};border-radius:6px;transition:.3s"></div>
+      </div>
+      <div style="flex:none;font-weight:900;font-size:14px;color:${col};min-width:30px;text-align:center">${x.got}<span style="font-size:10px;color:var(--faint);font-weight:600">/${r.n}</span></div>
+      <div style="flex:none;font-size:10.5px;color:${col};min-width:96px;text-align:left">${note}</div>
+    </div>`;
   }).join('');
-  const alerts=issues.map(i=>{
-    const txt=i.kind==='over'
-      ? `⚠️ ${i.rule.label} زادت (${i.count}) — ${i.rule.msg}`
-      : `❌ ${i.rule.label} ناقصة (${i.count}) — ${i.rule.msg}`;
-    return `<div style="font-size:12px;color:var(--danger);margin-top:4px">${txt}</div>`;
-  }).join('');
-  const ok=issues.length===0;
-  return `<div class="rank-row" style="flex-direction:column;align-items:stretch;gap:8px;border-right:3px solid ${ok?'var(--ready)':'var(--danger)'}">
+  const nIssues=cur.issues.length;
+  const ok=nIssues===0;
+  const headBadge = ok
+    ? `<span style="background:#23A66B22;color:var(--ready);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px">✓ ملتزم</span>`
+    : `<span style="background:#D6454522;color:var(--danger);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px">${nIssues} ${nIssues===1?'مشكلة':'مشاكل'}</span>`;
+  const prev=teacherWeekCompliance(t.id, new Date(weekStart(refDate).getTime()-864e5));
+  const prevN=prev.issues.length;
+  const prevChip = `<span style="font-size:10.5px;color:var(--faint)">الأسبوع اللي فات: ${prevN===0?'<span style=\"color:var(--ready)\">✓</span>':`<span style=\"color:var(--danger)\">${prevN} ${prevN===1?'مشكلة':'مشاكل'}</span>`}</span>`;
+  const repeat = (!ok && prevN>0) ? ` <span style="font-size:10px;color:var(--danger);font-weight:800">· متكرّر ⚠️</span>` : '';
+  return `<div class="rank-row" style="flex-direction:column;align-items:stretch;gap:6px;border-right:3px solid ${ok?'var(--ready)':'var(--danger)'}">
     <div style="display:flex;align-items:center;gap:10px">
       <span class="rank-pos">${avaT(t.id,34)}</span>
-      <div class="rank-main"><div class="nm">${t.name} ${ok?'<span style=\"color:var(--ready);font-size:12px\">✓ ملتزم</span>':''}</div>
-        <div class="sub">${showName&&owner.name?`<span>👤 ${owner.name}</span>`:''}</div></div>
-      <div style="display:flex;gap:12px;flex:none">${chips}</div>
+      <div class="rank-main"><div class="nm">${t.name}</div>
+        <div class="sub">${showName&&owner.name?`<span>👤 ${owner.name}</span>`:''}${prevChip}${repeat}</div></div>
+      ${headBadge}
     </div>
-    ${alerts?`<div style="padding-right:44px">${alerts}</div>`:''}
+    <div style="padding:2px 2px 4px">${rows}</div>
   </div>`;
 }
 function complianceSection(refDate, myTeachers){
@@ -2051,7 +2106,7 @@ function complianceSection(refDate, myTeachers){
       <div class="nav-group-label" style="margin:0;font-size:13px;font-weight:800">🚦 الالتزام الأسبوعي — أسبوع ${weekLabel(refDate)}</div>
       ${badge}
     </div>
-    <div style="font-size:11.5px;color:var(--faint);margin:0 4px 12px">القواعد: الكوميكس مش أكتر من ٢ · الريلز ٢ على الأقل · الديزاين ٢ على الأقل (في الأسبوع)</div>
+    <div style="font-size:11.5px;color:var(--faint);margin:0 4px 12px">القواعد الأسبوعية: 😂 كوميكس ٢ كحد أقصى · 🎬 ريلز ٢ على الأقل · 🎨 ديزاين ٢ على الأقل · «الحد الأدنى» بيتحاسب آخر الأسبوع (قبلها بيظهر «لسه بيكمّل»)</div>
     ${rows}`;
 }
 function reportsView(){
@@ -2226,7 +2281,7 @@ const GUIDE=[
   {ico:'📅', title:'الأجندة', text:'شغلك مرتّب بالأيام (النهارده، بكرة، الأسبوع ده). والأهم: مرتّبة بالأولوية — المستعجل الأول، وجوه كل مجموعة اللي وقته أطول يظهر فوق. كل يوم افتحها تعرف تعمل إيه.', roles:['member','lead','manager','admin']},
   {ico:'👥', title:'شغل الفريق', text:'في الأجندة فيه تاب «شغل الفريق» تشوف فيه شغل كل اللي تحتك في مكان واحد.', roles:['lead','manager','admin']},
   {ico:'🎓', title:'المدرّسين', text:'كل مدرّس وخطته. دوس على أي مدرّس تشوف بورده وحده، وتقدر تغيّر صورته ولينكاته ويوم راحته.', roles:['member','lead','manager','admin']},
-  {ico:'⭐', title:'التقييم والترتيب', text:'كل موظف بياخد درجة من ١٠٠: جودة شغله (تقييم القائد) ٥٠٪ + انتظامه في النزول ٣٠٪ + تقارير مدرّسينه ٢٠٪. وفيه ترتيب للشركة كلها.', roles:['member','lead','manager','admin']},
+  {ico:'⭐', title:'التقييم والترتيب', text:'كل موظف بياخد درجة من ١٠٠: انتظامه في النزول ٣٥٪ + التزامه بتوازن الأنواع ٣٠٪ + جودة شغله (تقييم القائد) ٢٠٪ + نمو صفحات مدرّسينه ١٥٪. وفيه ترتيب للشركة كلها.', roles:['member','lead','manager','admin']},
   {ico:'📊', title:'التقارير الشهرية', text:'كل شهر تدخّل إحصائيات فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات (لينك أو صورة). السايت بيجمعها مع شغلك في تقرير واحد.', roles:['lead','manager','admin']},
   {ico:'⚙️', title:'إدارة الفريق', text:'تضيف موظفين، تحدّد أدوارهم، توقفهم، وتوزّع المدرّسين على الموظفين.', roles:['manager','admin']},
   {ico:'🔔', title:'الإشعارات', text:'الجرس فوق بيوصّلك أي حاجة مهمة: تاسك اتطلبت منك، بوست اترجع بملاحظة، أو تذكير المراجعة الأسبوعية.', roles:['member','lead','manager','admin']},
@@ -2278,7 +2333,7 @@ const LATEST_UPDATE={
     '🔔 إشعارات جديدة: تذكير أول الشهر (تقارير/تقييمات)، تنبيه لو مدرّس ما نزلش امبارح، تنبيه الحاجات المتأخرة، وتنبيه للقائد عن اللي فوّتوا أيام.',
     '📅 تقويم شهري في صفحة كل مدرّس: تشوف نزل امتى وفات امتى، وتدوس على أي يوم تشوف اللي اتنشر فيه.',
     '🗓 وقت ما تنشر بوست بتختار اتنشر يوم كام (لو اتأخرت في التسجيل) — والقائد يقدر يصحّح أي يوم من التقويم.',
-    '🤝 متابعة المدرّس + التقييم الجديد (جودة ٤٠٪ + متابعة ٢٠٪ + نزول ٢٠٪ + تقرير ٢٠٪).',
+    '🤝 متابعة المدرّس + التقييم الجديد (انتظام ٣٥٪ + توازن ٣٠٪ + جودة ٢٠٪ + نمو ١٥٪).',
     '🏆 ترتيب الموظفين + ترتيب التيمات.',
   ],
 };
@@ -2370,10 +2425,10 @@ function guideExtra(){
   // التقييم بالبلدي
   let scoring='';
   scoring = sec('⭐ التقييم بيتحسب إزاي (بالبلدي)')
-      + step('<b>جودة الشغل ٤٠٪:</b> تقييم القائد لأفكارك وشغلك (سيء/عادي/كويس/ممتاز) على كل بوست.')
-      + step('<b>متابعة المدرّس ٢٠٪:</b> تقييم القائد شهريًا لإدارتك للمدرّس (سرعة الرد، رضاه، التواصل، تنفيذ طلباته).')
-      + step('<b>الانتظام في النزول ٢٠٪:</b> إنك بتنزّل لمدرّسينك بانتظام (أول يوم فايت في الأسبوع بيتسامح).')
-      + step('<b>التقارير ٢٠٪:</b> إنك بتسجّل تقارير مدرّسينك عن الشهر اللي فات.')
+      + step('<b>الانتظام في النزول ٣٥٪:</b> إنك بتنزّل لمدرّسينك بانتظام كل يوم (أول يوم فايت في الأسبوع بيتسامح).')
+      + step('<b>التوازن ٣٠٪:</b> إنك ملتزم بقواعد الأنواع أسبوعيًا — الكوميكس مش أكتر من ٢، الريلز ٢ على الأقل، الديزاين ٢ على الأقل.')
+      + step('<b>جودة الشغل ٢٠٪:</b> تقييم القائد لأفكارك وشغلك (سيء/عادي/كويس/ممتاز) على كل بوست.')
+      + step('<b>نمو الصفحة ١٥٪:</b> تحسّن أرقام صفحات مدرّسينك (متابعين/مشاهدات/تفاعل) مقارنة بالشهر اللي فات.')
       + step('<b>عادل:</b> أي جزء القائد ماقيّمهوش، مابيتحسبش عليك — الدرجة بتتوزّع على الباقي. ومحدش بياخد صفر بالغلط.')
       + (isLeader?step('<b>للقادة:</b> التيم ليدر = نص درجته شغله + نص أداء فريقه. الأكونت مانجر = أداء فريقه.'):'' );
 
@@ -2401,7 +2456,7 @@ function tourSteps(){
     {sel:'#addBtn', title:'تضيف شغل', text:'تضيف بوست، أو تبدّل لـ «تاسك» جوه النافذة. لكل كارت تحدّد المدرّس، التصنيف، الأولوية، والمدة المتوقّعة — ودول اللي بيرتّبوا أجندتك.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="agenda"]', title:'الأجندة — ابدأ يومك منها', text:'شغلك مرتّب: المستعجل الأول، وجوه كل يوم اللي وقته أطول فوق. افتحها كل صبح تعرف تبدأ بإيه بالظبط من غير تفكير.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="teachers"]', title:'المدرّسين', text:'كل مدرّس وخطته لوحده. دوس على أي مدرّس تشوف بورده مفلتر عليه، وتقدر تغيّر صورته ولينكاته ويوم راحته (اللي مش بيتحاسب عليه).', roles:['member','lead','manager','admin']},
-    {sel:'[data-view="rank"]', title:'التقييم والترتيب', text:'درجتك من ١٠٠: جودة شغلك ٥٠٪ + انتظامك ٣٠٪ + تقاريرك ٢٠٪. تشوف ترتيبك في الشركة كمان.', roles:['member','lead','manager','admin']},
+    {sel:'[data-view="rank"]', title:'التقييم والترتيب', text:'درجتك من ١٠٠: انتظامك في النزول ٣٥٪ + توازن الأنواع ٣٠٪ + جودة شغلك ٢٠٪ + نمو صفحاتك ١٥٪. تشوف ترتيبك في الشركة كمان.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="reports"]', title:'التقارير الشهرية', text:'كل شهر تسجّل أرقام فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات إجباري. السايت بيجمعها مع شغلك في صورة واحدة.', roles:['lead','manager','admin']},
     {sel:'#navManage', title:'إدارة الفريق', text:'تضيف موظفين، تحدّد أدوارهم، توقفهم، وتوزّع المدرّسين. أي حد بترقّيه بتتفتحله مميزات أكتر تلقائيًا.', roles:['manager','admin']},
     {sel:'#bellBtn', title:'الإشعارات', text:'بتوصّلك أول بأول: تاسك اتطلبت منك، بوست اترجّع بملاحظة، أو تذكير المراجعة للقادة. دوس على أي إشعار يوديك للكارت بتاعه.', roles:['member','lead','manager','admin']},
