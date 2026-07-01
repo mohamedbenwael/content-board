@@ -2108,8 +2108,7 @@ function complianceSection(refDate, myTeachers){
     ${rows}`;
 }
 function reportsView(){
-  if(!reportMonth)reportMonth=ymNow();
-  const ym=reportMonth;
+if(!reportMonth)reportMonth=shiftYm(ymNow(),-1);  const ym=reportMonth;
   const ids=scopeIds();
   const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
   const nav=`<div class="week-nav" style="margin-bottom:18px"><button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
