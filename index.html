@@ -404,6 +404,26 @@ try{
     fatal('مكتبة Supabase ماقدرتش تحمّل — ده بيحصل أحيانًا جوه المعاينة هنا بسبب حجب الإنترنت. جرّب تفتح الملف في متصفحك مباشرة، أو استنى لما نرفعه على Vercel.');
   } else {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // حماية «العرض بمنظور»: وقت المعاينة أي محاولة تعديل بتتمنع (عرض فقط)
+    const _sbFrom = sb.from.bind(sb);
+    sb.from = function(tbl){
+      const qb = _sbFrom(tbl);
+      if(!window.viewAsId) return qb;
+      ['insert','update','upsert','delete'].forEach(m=>{
+        qb[m] = function(){
+          try{ toast('وضع المعاينة: العرض فقط — مش هتقدر تعدّل',true); }catch(e){}
+          const res = Promise.resolve({data:null, error:{message:'view-as: read only'}});
+          const chain = new Proxy(function(){}, { get(t,prop){
+            if(prop==='then') return res.then.bind(res);
+            if(prop==='catch') return res.catch.bind(res);
+            if(prop==='finally') return res.finally.bind(res);
+            return ()=>chain;
+          }});
+          return chain;
+        };
+      });
+      return qb;
+    };
   }
 }catch(e){ fatal('خطأ في الاتصال: '+e.message); }
 function withTimeout(p,ms,label){
@@ -490,10 +510,43 @@ const LINKS=[
 const AVA=['#1B2A4A','#4A6FB5','#23A66B','#8B5CC2','#C2604A','#3E8E8E','#B5832A','#5A6BA8'];
 
 let ME=null, PROFILES=[], TEACHERS=[], CARDS=[], COMMENTS=[], PUBLOG=[], NOTIFS=[], REPORTS=[];
+let REAL_ME=null; // الأدمن الحقيقي وقت المعاينة
+window.viewAsId=null; // بنشوف بمنظور مين
+window.enterViewAs=function(id){
+  const target=PROFILES.find(p=>p.id===id); if(!target) return;
+  if((REAL_ME||ME).role!=='admin'){ toast('المعاينة للأدمن بس',true); return; }
+  if(!REAL_ME) REAL_ME=ME;
+  ME=target; window.viewAsId=id;
+  view='dashboard'; detailId=null;
+  render(); renderViewAsBar();
+  toast('بتشوف دلوقتي بمنظور '+target.name);
+};
+window.exitViewAs=function(){
+  if(!REAL_ME) return;
+  ME=REAL_ME; REAL_ME=null; window.viewAsId=null;
+  view='team'; render(); renderViewAsBar();
+  toast('رجعت لحسابك');
+};
+function renderViewAsBar(){
+  let bar=document.getElementById('viewAsBar');
+  if(window.viewAsId){
+    const t=U(window.viewAsId);
+    if(!bar){
+      bar=document.createElement('div'); bar.id='viewAsBar';
+      bar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--doing);color:#fff;display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 14px;font-size:13px;font-weight:800;box-shadow:0 -2px 12px rgba(0,0,0,.25)';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML='👁 بتشوف بمنظور: '+t.name+' · عرض فقط'
+      +' <button onclick="exitViewAs()" style="background:#fff;color:var(--doing);border:none;border-radius:8px;padding:6px 14px;font-weight:900;cursor:pointer">✖ خروج</button>';
+  } else if(bar){
+    bar.remove();
+  }
+}
 let reportMonth=null; // 'YYYY-MM' الشهر المعروض في التقارير
 let complianceWeek='cur'; // 'cur' | 'prev' — أسبوع تنبيهات الالتزام
 let rankMonth=null; // شهر التقييم المعروض (افتراضي: الشهر اللي فات)
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
+let EXEMPTIONS={}; // إعفاءات التقارير { teacherId: {type:'permanent'|'month', ym?} }
 let TREVIEWS=[]; // تقييمات متابعة المدرّسين
 const TR_CRITERIA=[{k:'reply',name:'سرعة الرد',ico:'⚡'},{k:'satis',name:'رضا المدرّس',ico:'😀'},{k:'comm',name:'التواصل',ico:'🤝'},{k:'exec',name:'تنفيذ الطلبات',ico:'✅'}];
 const TR_OPTS=[{v:3,name:'كويس'},{v:2,name:'مقبول'},{v:1,name:'سيء'}];
@@ -627,11 +680,14 @@ async function reload(){
     sb.from('teachers').select('*'),
     sb.from('notifications').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
-    sb.from('app_settings').select('*').eq('key','announcement'),
+    sb.from('app_settings').select('*').in('key',['announcement','report_exemptions']),
     sb.from('teacher_reviews').select('*'),
   ]);
   PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
-  ANNOUNCE=(small[4].data&&small[4].data[0])?small[4].data[0].value:null;
+  { const rows=small[4].data||[];
+    const a=rows.find(r=>r.key==='announcement'); ANNOUNCE=a?a.value:null;
+    const e=rows.find(r=>r.key==='report_exemptions'); EXEMPTIONS=(e&&e.value)?e.value:{};
+  }
   TREVIEWS=small[5].data||[];
 
   if(loadedAll){ await loadAllCards(); return; }
@@ -770,24 +826,31 @@ function memberQuality(memberId, ym){
 // نمو الصفحة: مقارنة أرقام الشهر الحالي بالشهر اللي فات (%) — 0..1 أو null
 // بيقيس التحسن النسبي مش الأرقام الخام عشان يكون عادل بين الصفحات الكبيرة والصغيرة
 function memberGrowthScore(memberId, ym){
-  const curYm=ym||ymNow(), prevYm=shiftYm(curYm,-1);
+  const curYm=ym||ymNow();
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
-  const cur={f:0,v:0,e:0,n:0}, prev={f:0,v:0,e:0,n:0};
-  ts.forEach(t=>{
-    const c=getReport(t.id,curYm), p=getReport(t.id,prevYm);
-    if(c&&p){cur.f+=c.new_followers||0;cur.v+=+c.views||0;cur.e+=+c.engagement||0;cur.n++;
-              prev.f+=p.new_followers||0;prev.v+=+p.views||0;prev.e+=+p.engagement||0;prev.n++;}
-  });
-  if(!cur.n||!prev.n) return null;
-  // نسبة التحسن لكل metric — 1.0 = نفس الشهر اللي فات، أكبر = أحسن
+  if(!ts.length) return null;
+  const av=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  // إجمالي شهر معيّن (لكل مدرّسي الموظف اللي ليهم تقرير الشهر ده)
+  const sumMonth=(m)=>{
+    let f=0,v=0,e=0,has=false;
+    ts.forEach(t=>{ const r=getReport(t.id,m); if(r){ f+=r.new_followers||0; v+=+r.views||0; e+=+r.engagement||0; has=true; } });
+    return has?{f,v,e}:null;
+  };
+  const cur=sumMonth(curYm);
+  if(!cur) return null;
+  // الأساس = متوسط آخر (لحد ٣) شهور اللي فيها بيانات — عشان الشهر الخارق مايبقاش سقف يعاقبك
+  const hist=[];
+  for(let k=1;k<=3;k++){ const m=sumMonth(shiftYm(curYm,-k)); if(m) hist.push(m); }
+  if(!hist.length) return null; // مفيش أساس نقارن بيه لسه
+  const base={ f:av(hist.map(x=>x.f)), v:av(hist.map(x=>x.v)), e:av(hist.map(x=>x.e)) };
   const ratios=[];
-  if(prev.f>0) ratios.push(cur.f/prev.f);
-  if(prev.v>0) ratios.push(cur.v/prev.v);
-  if(prev.e>0) ratios.push(cur.e/prev.e);
+  if(base.f>0) ratios.push(cur.f/base.f);
+  if(base.v>0) ratios.push(cur.v/base.v);
+  if(base.e>0) ratios.push(cur.e/base.e);
   if(!ratios.length) return null;
-  const avg=ratios.reduce((a,b)=>a+b,0)/ratios.length;
-  // نسبة=1 تعني ثبات (60%)، 1.5+ = ممتاز (100%)، 0.5- = سيء (0%)
-  return Math.max(0,Math.min(1,(avg-0.5)/1.0));
+  const ratio=ratios.reduce((a,b)=>a+b,0)/ratios.length;
+  // زيادة أو ثبات = مكافأة (٨٠٪ فأكتر) · التراجع الحقيقي بس هو اللي بينزّل النقطة بنسبة النزول
+  return ratio>=1 ? Math.min(1, 0.8 + (ratio-1)*0.5) : Math.max(0, ratio*0.8);
 }
 // balance الأسابيع المكتملة في الشهر الحالي — 0..1 أو null
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
@@ -799,19 +862,24 @@ function memberBalanceScore(memberId, ym){
   const [yy,mm]=ym.split('-').map(Number);
   const monthEnd=new Date(yy,mm,1); // أول الشهر اللي بعده (حصري)
   const cutoff = (ym===ymNow()) ? new Date() : monthEnd; // الحالي: لحد النهاردة · الفايت: الشهر كله
-  const completed=[];
+  let evaluable=0, ok=0;
   let d=new Date(mStart);
-  while(d.getDay()!==6) d.setDate(d.getDate()+1);
+  while(d.getDay()!==6) d.setDate(d.getDate()+1); // أول سبت
   while(d<monthEnd){
     const fri=new Date(d); fri.setDate(d.getDate()+6);
-    if(fri<cutoff) completed.push(new Date(d));
+    if(fri<cutoff){
+      const friYmd=ymd(fri);
+      // المدرّسين اللي كانوا مسندين فعلاً في الأسبوع ده (مش قبل ما يتسندوا)
+      const active=ts.filter(t=>!t.assigned_at || t.assigned_at.slice(0,10)<=friYmd);
+      if(active.length){
+        evaluable++;
+        if(active.every(t=>teacherWeekCompliance(t.id,d).issues.length===0)) ok++;
+      }
+    }
     d.setDate(d.getDate()+7);
   }
-  if(!completed.length) return null;
-  
-  // تم إزالة شرط "الهروب" عشان الموظف ياخد صفر لو مش بيصنف
-  const ok=completed.filter(sat=>ts.every(t=>teacherWeekCompliance(t.id,sat).issues.length===0)).length;
-  return ok/completed.length;
+  if(!evaluable) return null; // مفيش أسابيع فيها مدرّس مسند → «لسه»
+  return ok/evaluable;
 }
 
 // إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
@@ -1275,7 +1343,9 @@ function teacherStatChip(t){
 }
 function detailView(){
   const p=U(detailId); if(!p||!p.id){view='team';return teamView();}
-  const back=`<button class="btn ghost" onclick="view='team';render()" style="margin-bottom:16px">‹ رجوع للفريق</button>`;
+  const back=`<button class="btn ghost" onclick="view='team';render()" style="margin-bottom:16px">‹ رجوع للفريق</button>`
+    + ((REAL_ME||ME).role==='admin' && !window.viewAsId && p.id!==(REAL_ME||ME).id
+       ? ` <button class="btn" onclick="enterViewAs('${p.id}')" style="margin-bottom:16px;margin-right:8px">👁 شوف بمنظوره</button>` : '');
   const myTeachers=TEACHERS.filter(t=>t.owner_id===p.id);
   const teachersBlock = myTeachers.length
     ? `<div class="nav-group-label" style="color:var(--muted);margin:6px 4px 10px;font-size:13px">المدرّسين اللي ماسكهم (${myTeachers.length})</div>
@@ -1500,7 +1570,7 @@ function memberBalanceBlock(){
   return `<div style="margin-bottom:24px">
     <div style="font-size:13px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:10px">
       👥 Balance الفريق
-      <span style="font-size:12px;font-weight:400;color:var(--muted)">كوميك ≤٢ · ريلز ≥٢ · ديزاين ≥٢</span>
+      <span style="font-size:12px;font-weight:400;color:var(--muted)">كوميكس حد أقصى ٢ · ريلز ٢ فأكتر · ديزاين ٢ فأكتر</span>
       <span style="margin-right:auto;display:flex;gap:8px">
         <span style="background:var(--ready)22;color:var(--ready);font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:12px">✓ ${okMembers} تمام</span>
         ${totalBadMembers?`<span style="background:#E06A4F22;color:#E06A4F;font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:12px">⚠ ${totalBadMembers} محتاج متابعة</span>`:''}
@@ -1513,10 +1583,10 @@ function complianceView(){
   const ts=complianceTeachers();
   const weekLbl=`${ymd(weekStart())} → ${ymd(weekEnd())}`;
   const today=new Date(), todayIsWeekEnd=today.getDay()===5; // الجمعة = نهاية الأسبوع
-  const weekStatus=todayIsWeekEnd?'⏳ آخر يوم من الأسبوع':'🔄 الأسبوع لسه شغال — المخالفات دي مش بتأثر على نقطة الـ balance لحد ما الأسبوع يخلص الجمعة';
+  const weekStatus=todayIsWeekEnd?'⏳ آخر يوم في الأسبوع':'🔄 الأسبوع لسه شغّال — قواعد «الحد الأدنى» بتتحسب بعد ما يخلص';
   const head=`<div class="page-head"><div><div class="page-title">التزام المحتوى الأسبوعي</div>
     <div class="page-sub">الأسبوع الحالي (${weekLbl}) · ${weekStatus}</div>
-    <div class="page-sub" style="margin-top:4px">القاعدة: الكوميكس ≤ ٢ · الريلز ≥ ٢ · الديزاين ≥ ٢</div></div></div>`;
+    <div class="page-sub" style="margin-top:4px">القاعدة: كوميكس حد أقصى ٢ · ريلز ٢ على الأقل · ديزاين ٢ على الأقل</div></div></div>`;
   if(!ts.length) return head+`<div class="empty"><div class="big">🎓</div>مفيش مدرّسين في نطاقك.</div>`;
   // قسم balance الفريق (للتيم ليدر والمانجر)
   const teamBlock=memberBalanceBlock();
@@ -1534,7 +1604,7 @@ function complianceView(){
       const got=c.counts[r.cat]||0;
       const bad=(r.type==='max'&&got>r.n)||(r.type==='min'&&got<r.n);
       const col=bad?(r.type==='max'?'#E06A4F':'#F2A93B'):'var(--ready)';
-      return `<span style="display:inline-flex;align-items:center;gap:4px;background:${col}1f;color:${col};font-weight:700;font-size:12px;padding:4px 10px;border-radius:14px">${r.ico} ${r.label}: ${got}${r.type==='max'?'/'+r.n:' (≥'+r.n+')'}</span>`;
+      return `<span style="display:inline-flex;align-items:center;gap:4px;background:${col}1f;color:${col};font-weight:700;font-size:12px;padding:4px 10px;border-radius:14px">${r.ico} ${r.label}: ${got} ${r.type==='max'?'(حد أقصى '+r.n+')':'(المطلوب '+r.n+')'}</span>`;
     }).join(' ');
     const issues=c.issues.map(is=>{
       const col=is.kind==='over'?'#E06A4F':'#F2A93B';
@@ -1591,7 +1661,8 @@ function myScoreCard(ym){
     ${breakdown}</div>`;
 }
 function rankView(){
-  if(!rankMonth) rankMonth=shiftYm(ymNow(),-1); // افتراضي: الشهر اللي فات
+  // أول ١٠ أيام: يفتح على الشهر اللي فات (التقييم النهائي) · بعد كده: الشهر الحالي (المتابعة الجارية)
+  if(!rankMonth) rankMonth = (new Date().getDate() <= 10) ? shiftYm(ymNow(),-1) : ymNow();
   const ym=rankMonth;
   const isMember=ME.role==='member';
   const monthNav=`<div class="week-nav" style="margin-bottom:16px">
@@ -2141,13 +2212,19 @@ if(!reportMonth)reportMonth=shiftYm(ymNow(),-1);  const ym=reportMonth;
   }).filter(Boolean).join('');
 
   // تقارير المدرّسين
+  let _firstRepBtn=true;
+  const ymPrevRep=shiftYm(ymNow(),-1);
   const teacherRows=myTeachers.map(t=>{
     const r=getReport(t.id,ym), posts=monthPosts(t.id,ym), can=canEditReport(t);
+    const tourId = (can && _firstRepBtn) ? (_firstRepBtn=false, ' id="repTourFirstBtn"') : '';
+    const exempt = isExempt(t, ymPrevRep);
+    const exBadge = exempt ? '<span style="color:var(--pub);font-weight:700">🛡️ معفي</span>' : '';
+    const exBtn = canManageExempt() ? `<button class="btn" style="height:34px;flex:none;background:transparent;border:1px solid var(--line2);color:var(--muted)" onclick="openExemptModal('${t.id}')" title="إعفاء من التقارير">🛡️</button>` : '';
     return `<div class="rank-row" style="${r?'':'opacity:.85'}">
       <span class="rank-pos">${avaT(t.id,34)}</span>
       <div class="rank-main"><div class="nm">${t.name}</div>
-        <div class="sub"><span>📤 ${posts} بوست</span>${r?`<span>+${fmtNum(r.new_followers)} متابع</span><span>👁 ${fmtNum(r.views)}</span><span>❤ ${fmtNum(r.engagement)}</span>${r.proof_link||r.proof_file?'<span>📎 إثبات</span>':''}`:'<span style="color:var(--danger)">لسه مفيش تقرير</span>'}</div></div>
-      ${can?`<button class="btn" style="height:34px;flex:none" onclick="openReport('${t.id}')">${r?'تعديل':'＋ تقرير'}</button>`:''}</div>`;
+        <div class="sub"><span>📤 ${posts} بوست</span>${r?`<span>+${fmtNum(r.new_followers)} متابع</span><span>👁 ${fmtNum(r.views)}</span><span>❤ ${fmtNum(r.engagement)}</span>${r.proof_link||r.proof_file?'<span>📎 إثبات</span>':''}`:(exempt?exBadge:'<span style="color:var(--danger)">لسه مفيش تقرير</span>')}</div></div>
+      ${exBtn}${can?`<button class="btn"${tourId} style="height:34px;flex:none" onclick="openReport('${t.id}')">${r?'تعديل':'＋ تقرير'}</button>`:''}</div>`;
   }).join('');
 
   return `<div class="page-head"><div><div class="page-title">التقارير الشهرية</div><div class="page-sub">إحصائيات فيسبوك لكل مدرّس + شغل السايت، مجمّعين في مكان واحد</div></div></div>
@@ -2360,43 +2437,82 @@ function checkUpdate(){
   if((ME.seen_update||0) >= LATEST_UPDATE.v)return;
   openUpdate();
 }
-// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
-// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
-// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
-// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
-// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
-// بيقرّر أنهي رسالة تظهر بعد الدخول
-// بيقرّر أنهي رسالة تظهر بعد الدخول
+// بيقرّر أنهي رسالة تظهر بعد الدخول (بالأولوية: ترحيب ← تحديث ← إعلان ← زن التقارير ← الجولة)
 function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
   if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
 
-  // 1. رسالة الزن (الأولوية القصوى - هتظهر الأول دايماً لو فيه تقارير ناقصة)
   const d = new Date();
+  // 1. رسالة الزن (الأولوية القصوى - لو فيه تقارير ناقصة)
+  let naggedNow = false;
   if (d.getDate() <= 10 && !window.hasNaggedSession) {
-      checkAndShowNagModal();
+      naggedNow = checkAndShowNagModal();
   }
 
-  // 2. الجولة التعليمية (بتظهر بعد رسالة الزن أو لو مفيش تقارير ناقصة)
-  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v8')) {
-     const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
-     const isThisMonth = ymNow() === '2026-07'; 
-     if (!(isThisMonth && isDelayedUser)) {
-         openReportTourIntro();
-     }
+  // 2. الجولة التعليمية — بس لو الزن ماظهرش دلوقتي (عشان مايمسحش بعضهم)
+  if (!naggedNow && d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_'+ymNow())) {
+     openReportTourIntro();
   }
 }
 
+// ===== إعفاءات التقارير (يديرها الأدمن/الأكونت مانجر من السايت) =====
+const EXEMPT_LEGACY = { '2026-06': ["كريم فرعون","الالفي","سعيد الفقي","حسين سلام"] }; // إعفاءات الشهر الانتقالي القديمة (توافق)
+function canManageExempt(){ return ME.role==='admin' || ME.role==='manager'; }
+function isExempt(t, ym){
+  const e = EXEMPTIONS[t.id];
+  if(e){ if(e.type==='permanent') return true; if(e.type==='month' && e.ym===ym) return true; }
+  const legacy = EXEMPT_LEGACY[ym];
+  if(legacy && legacy.includes((t.name||'').trim())) return true;
+  return false;
+}
+async function setExemption(teacherId, rec){ // rec = {type} أو {type:'month',ym} أو null للإلغاء
+  if(rec) EXEMPTIONS[teacherId]=rec; else delete EXEMPTIONS[teacherId];
+  const {error}=await sb.from('app_settings').upsert(
+    {key:'report_exemptions', value:EXEMPTIONS, updated_at:new Date().toISOString()},
+    {onConflict:'key'});
+  if(error){ toast(error.message,true); return false; }
+  return true;
+}
+window.openExemptModal = function(teacherId){
+  if(!canManageExempt()) return;
+  const t=T(teacherId); if(!t) return;
+  const cur=EXEMPTIONS[teacherId];
+  const ymPrev=shiftYm(ymNow(),-1);
+  const curTxt = cur ? (cur.type==='permanent'?'معفي دائم':('معفي لشهر '+ymLabel(cur.ym))) : 'مش معفي';
+  document.getElementById('mTitle').textContent='إعفاء من التقارير';
+  document.getElementById('mBody').innerHTML =
+    "<div style='padding:6px 0'>"
+    + "<div style='font-weight:900;font-size:16px;margin-bottom:4px'>"+t.name+"</div>"
+    + "<div style='font-size:12.5px;color:var(--muted);margin-bottom:14px'>الحالة دلوقتي: <b>"+curTxt+"</b></div>"
+    + "<div style='font-size:12.5px;color:var(--muted);margin-bottom:8px'>الإعفاء معناه إن الزن مش هيطالب بتقرير المدرّس ده.</div>"
+    + "<div style='display:flex;flex-direction:column;gap:8px'>"
+    + "<button class='btn' id='ex_month' style='justify-content:flex-start'>📅 اعفيه لشهر "+ymLabel(ymPrev)+" بس</button>"
+    + "<button class='btn' id='ex_perm' style='justify-content:flex-start'>♾️ اعفيه دائم (لحد ما تشيله)</button>"
+    + (cur?"<button class='btn' id='ex_clear' style='justify-content:flex-start;color:var(--danger)'>✖ شيل الإعفاء</button>":"")
+    + "</div></div>";
+  document.getElementById('mFoot').innerHTML="<button class='btn' onclick='closeModal()' style='flex:1'>إغلاق</button>";
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('ex_month').onclick=async()=>{ if(await setExemption(teacherId,{type:'month',ym:ymPrev})){ closeModal(); render(); toast('اتعفى لشهر '+ymLabel(ymPrev)+' ✓'); } };
+  document.getElementById('ex_perm').onclick=async()=>{ if(await setExemption(teacherId,{type:'permanent'})){ closeModal(); render(); toast('اتعفى دائم ✓'); } };
+  const clr=document.getElementById('ex_clear'); if(clr) clr.onclick=async()=>{ if(await setExemption(teacherId,null)){ closeModal(); render(); toast('اتشال الإعفاء ✓'); } };
+};
+
 window.checkAndShowNagModal = function() {
      const ymPrev = shiftYm(ymNow(), -1);
-     const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
-     const exemptedTeachers = ["كريم فرعون", "الالفي", "سعيد الفقي"];
+     // نطاق المدرّسين حسب الدور: العضو = مدرّسينه · القائد/المانجر = كل اللي تحته
+     const ids = scopeIds();
+     const myTeachers = TEACHERS.filter(t => ids.includes(t.owner_id));
+
+     // الشهر الانتقالي: الشهر اللي اتعمل فيه السايت — تواريخ إضافة المدرّسين فيه مش حقيقية
+     const SITE_START_MONTH = '2026-06';
+     const isTransition = (ymPrev === SITE_START_MONTH);
 
      const missing = myTeachers.filter(t => {
         if (getReport(t.id, ymPrev)) return false; 
-        if (exemptedTeachers.includes(t.name.trim())) return false;
-        if (t.assigned_at) {
+        if (isExempt(t, ymPrev)) return false;            // إعفاء من السايت (دائم أو للشهر ده)
+        // الإعفاء التلقائي بالتاريخ — بنتخطّاه في الشهر الانتقالي بس
+        if (!isTransition && t.assigned_at) {
            const assignMonth = t.assigned_at.slice(0, 7);
            const assignDay = parseInt(t.assigned_at.slice(8, 10));
            if (assignMonth > ymPrev) return false;
@@ -2408,13 +2524,24 @@ window.checkAndShowNagModal = function() {
      if (missing.length > 0) {
         window.hasNaggedSession = true; 
         openNagModal(ymPrev, missing);
+        return true;
      }
+     return false;
 };
 
 window.openNagModal = function(ymPrev, missing) {
+  const isBoss = (ME.role==='lead'||ME.role==='manager'||ME.role==='admin');
+  const names = missing.map(t=>t.name);
+  const shown = names.slice(0,10).join('، ') + (names.length>10 ? (' و'+(names.length-10)+' غيرهم') : '');
+  const headline = isBoss
+    ? ('فيه '+missing.length+' مدرّس في فريقك لسه ما اتسجّلش تقاريرهم!')
+    : ('نسيت تسجّل تقارير شهر '+ymLabel(ymPrev)+'!');
+  const subline = isBoss
+    ? ('تقارير شهر '+ymLabel(ymPrev)+' لسه ناقصة — التقييم مش هيطلع مظبوط من غيرها. راجع فريقك وذكّرهم.')
+    : ('عندك <b>'+missing.length+'</b> مدرّسين لسه مسجّلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.');
   document.getElementById('mTitle').textContent = '⚠️ تقارير الشهر اللي فات!';
-  document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>🚨</div><div style='font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)'>نسيت تسجل تقارير شهر " + ymLabel(ymPrev) + "!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عندك <b>" + missing.length + "</b> مدرسين لسه مسجلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.</div><div style='font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px'>المدرسين: " + missing.map(t=>t.name).join('، ') + "</div></div>";
-  document.getElementById('mFoot').innerHTML = "<button class='btn' onclick='closeModal()' style='flex:1'>هسجلها بعدين</button><button class='btn primary' id='go_rep_now' style='flex:2'>يلا نسجلهم دلوقتي 🚀</button>";
+  document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>🚨</div><div style='font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)'>" + headline + "</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>" + subline + "</div><div style='font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px'>المدرّسين: " + shown + "</div></div>";
+  document.getElementById('mFoot').innerHTML = "<button class='btn' onclick='closeModal()' style='flex:1'>بعدين</button><button class='btn primary' id='go_rep_now' style='flex:2'>" + (isBoss?'شوف التقارير الناقصة 🚀':'يلا نسجّلهم دلوقتي 🚀') + "</button>";
   document.getElementById('go_rep_now').onclick = () => { closeModal(); view = 'reports'; reportMonth = ymPrev; render(); };
   document.getElementById('overlay').classList.add('show');
 };
@@ -2423,7 +2550,7 @@ window.openReportTourIntro = function() {
   document.getElementById('mTitle').textContent = 'جولة سريعة: إزاي تسجل تقاريرك؟ 🚀';
   document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>📊</div><div style='font-size:17px;font-weight:900;margin-bottom:8px'>التقارير بقت أسهل وأدق!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عشان التقييم يكون عادل، التقارير بقت بتطلب منك تحدد الشهر بالظبط. يلا ناخد جولة سريعة 30 ثانية نشوف بتتسجل إزاي عملي.</div></div>";
   document.getElementById('mFoot').innerHTML = "<button class='btn primary' id='start_rep_tour' style='flex:1'>يلا نبدأ الجولة 🎯</button>";
-  document.getElementById('start_rep_tour').onclick = () => { localStorage.setItem('seen_report_tour_v8', 'true'); closeModal(); startReportMiniTour(); };
+  document.getElementById('start_rep_tour').onclick = () => { localStorage.setItem('seen_report_tour_'+ymNow(), 'true'); closeModal(); startReportMiniTour(); };
   document.getElementById('overlay').classList.add('show');
 };
 
@@ -2431,52 +2558,61 @@ let repTourStep = 0;
 let repTourTid = null;
 
 window.startReportMiniTour = function() {
-  view = 'reports'; render();
-  setTimeout(() => {
-      const ids = scopeIds();
-      const visibleTeachers = TEACHERS.filter(t => ids.includes(t.owner_id));
-      const firstBtn = document.querySelector('.rank-row .btn');
-      if (!firstBtn || visibleTeachers.length === 0) { toast('مفيش مدرسين نطبق عليهم عملي!'); setTimeout(checkAndShowNagModal, 1000); return; }
-      repTourTid = visibleTeachers[0].id;
+  view = 'reports';
+  reportMonth = shiftYm(ymNow(), -1); // نبدأ على الشهر اللي فات (اللي التقارير بتتكتب له)
+  render();
+  // نستنى الصفحة تترسم فعلاً قبل ما ندوّر على الزرار
+  let tries=0;
+  (function waitBtn(){
+    const btn = document.getElementById('repTourFirstBtn');
+    if (btn) {
+      btn.scrollIntoView({block:'center'});
       repTourStep = 1;
-      runRepTourStep();
-  }, 400); 
+      setTimeout(runRepTourStep, 300); // بعد ما يخلص scroll
+      return;
+    }
+    if (tries++ < 20) { setTimeout(waitBtn, 100); return; } // نحاول لحد ثانيتين
+    toast('مفيش مدرّسين تقدر تسجّلهم دلوقتي');
+  })();
 };
 
 window.runRepTourStep = function() {
    const backdrop = document.getElementById('tourBackdrop');
    const pop = document.getElementById('tourPop');
    const spot = document.getElementById('tourSpot');
+   if(!backdrop||!pop||!spot) return;
    backdrop.classList.add('show');
    if (repTourStep === 1) {
-       const btn = document.querySelector('.rank-row .btn');
-       if(!btn) return endRepTour();
-       btn.scrollIntoView({block:'center', behavior:'smooth'});
-       setTimeout(() => {
-           const r = btn.getBoundingClientRect();
-           spot.style.display='block'; spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
-           spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
-           pop.style.display='block';
-           pop.innerHTML = "<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p><div class='row'><div class='btns'><button class='primary' onclick='clickRepTourBtn()'>👆 دوس على الزرار هنا</button></div></div>";
-           let pTop = r.bottom + 16; if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
-           pop.style.top = pTop + 'px'; pop.style.left = Math.max(10, r.left - 200) + 'px';
-       }, 350);
+       const btn = document.getElementById('repTourFirstBtn');
+       if(!btn){ return endRepTour(); }
+       const r = btn.getBoundingClientRect();
+       spot.style.display='block'; spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
+       spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
+       pop.style.display='block';
+       pop.innerHTML = "<h4>خطوة ١: افتح التقرير</h4><p>دوس على الزرار المضيّء ده عشان تفتح تقرير أول مدرّس.</p><div class='row'><div class='btns'><button class='primary' onclick='clickRepTourBtn()'>👆 يلا افتح التقرير</button></div></div>";
+       let pTop = r.bottom + 16; if (pTop + 170 > window.innerHeight) pTop = Math.max(10, r.top - 170);
+       pop.style.top = pTop + 'px'; pop.style.left = Math.max(10, Math.min(window.innerWidth-310, r.left - 60)) + 'px';
    } else if (repTourStep === 2) {
        const sel = document.getElementById('r_ym');
-       if(!sel) return endRepTour();
-       const r = sel.getBoundingClientRect();
-       spot.style.display='block'; spot.style.top=(r.top-4)+'px'; spot.style.left=(r.left-4)+'px';
-       spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
-       pop.style.display='block';
-       pop.innerHTML = "<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p><div class='row'><div class='btns'><button class='primary' onclick='endRepTour()'>فهمت، شكراً 👍</button></div></div>";
-       pop.style.top=(r.bottom+16)+'px'; pop.style.left=Math.max(10, r.left - 150)+'px';
+       if(!sel){ return endRepTour(); }
+       sel.scrollIntoView({block:'center'});
+       setTimeout(()=>{
+         const r = sel.getBoundingClientRect();
+         spot.style.display='block'; spot.style.top=(r.top-4)+'px'; spot.style.left=(r.left-4)+'px';
+         spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
+         pop.style.display='block';
+         pop.innerHTML = "<h4>خطوة ٢: اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر الصح (الشهر اللي فات) قبل ما تكتب أي رقم — عشان التقييم يطلع مظبوط.</p><div class='row'><div class='btns'><button class='primary' onclick='endRepTour()'>تمام، فهمت 👍</button></div></div>";
+         let pTop=r.bottom+16; if(pTop+170>window.innerHeight) pTop=Math.max(10,r.top-170);
+         pop.style.top=pTop+'px'; pop.style.left=Math.max(10, Math.min(window.innerWidth-310, r.left - 60))+'px';
+       },250);
    }
 };
 
 window.clickRepTourBtn = function() {
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
-   if(repTourTid) { openReport(repTourTid); repTourStep = 2; setTimeout(runRepTourStep, 500); }
+   const btn = document.getElementById('repTourFirstBtn');
+   if(btn){ btn.click(); repTourStep = 2; setTimeout(runRepTourStep, 550); }
    else { endRepTour(); }
 };
 
@@ -2484,7 +2620,6 @@ window.endRepTour = function() {
    document.getElementById('tourBackdrop').classList.remove('show');
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
-   setTimeout(checkAndShowNagModal, 600); 
 };
 window.openAnnounce=function(){
   if(!ANNOUNCE)return;
@@ -3056,7 +3191,7 @@ document.getElementById('auGo').onclick=doAuth;
 document.getElementById('auPass').addEventListener('keydown',e=>{if(e.key==='Enter')doAuth();});
 document.getElementById('auToggle').onclick=toggleMode;
 window.testLatestUpdate = function() {
-    localStorage.removeItem('seen_report_tour_v8');
+    localStorage.removeItem('seen_report_tour_'+ymNow());
     window.hasNaggedSession = false;
     closeModal();
     postLoadModals();
