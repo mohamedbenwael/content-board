@@ -2043,8 +2043,7 @@ function ymLabel(ym){const [y,m]=ym.split('-');const names=['يناير','فبر
 function shiftYm(ym,delta){const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-1+delta,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 function monthPosts(teacherId,ym){return PUBLOG.filter(l=>l.teacher_id===teacherId && (l.pub_date||'').slice(0,7)===ym).length;}
 function getReport(teacherId,ym){return REPORTS.find(r=>r.teacher_id===teacherId && r.ym===ym);}
-function fmtNum(n){n=+n||0;return n>=1000?(n/1000).toFixed(n%1000?1:0).replace('.0','')+'k':String(n);}
-// ===== قسم تنبيهات الالتزام الأسبوعي =====
+function fmtNum(n){n=+n||0;if(n>=1000000)return(n/1000000).toFixed(1).replace('.0','')+'m';return n>=1000?(n/1000).toFixed(1).replace('.0','')+'k':String(n);}// ===== قسم تنبيهات الالتزام الأسبوعي =====
 function weekLabel(refDate){
   const s=weekStart(refDate), e=weekEnd(refDate);
   const f=d=>`${d.getDate()}/${d.getMonth()+1}`;
