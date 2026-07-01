@@ -2375,13 +2375,10 @@ function postLoadModals(){
   const d = new Date();
   let shouldShowTour = false;
 
-  // 1. الجولة التفاعلية
   if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v8')) {
      const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
      const isThisMonth = ymNow() === '2026-07'; 
-     if (!(isThisMonth && isDelayedUser)) {
-         shouldShowTour = true;
-     }
+     if (!(isThisMonth && isDelayedUser)) { shouldShowTour = true; }
   }
 
   if (shouldShowTour) {
@@ -2389,7 +2386,6 @@ function postLoadModals(){
      return;
   }
 
-  // 2. رسالة الزن (لو مفيش جولة)
   if (d.getDate() <= 10 && !window.hasNaggedSession) {
       checkAndShowNagModal();
   }
@@ -2422,9 +2418,7 @@ window.openNagModal = function(ymPrev, missing) {
   document.getElementById('mTitle').textContent = '⚠️ تقارير الشهر اللي فات!';
   document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>🚨</div><div style='font-size:17px;font-weight:900;margin-bottom:8px;color:var(--danger)'>نسيت تسجل تقارير شهر " + ymLabel(ymPrev) + "!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عندك <b>" + missing.length + "</b> مدرسين لسه مسجلتش تقاريرهم. التقييم بتاعك هيتأثر وهينقص لو قفلنا الشهر من غيرها.</div><div style='font-size:12px;font-weight:800;margin-top:14px;background:var(--danger-dim);color:var(--danger);padding:10px;border-radius:10px'>المدرسين: " + missing.map(t=>t.name).join('، ') + "</div></div>";
   document.getElementById('mFoot').innerHTML = "<button class='btn' onclick='closeModal()' style='flex:1'>هسجلها بعدين</button><button class='btn primary' id='go_rep_now' style='flex:2'>يلا نسجلهم دلوقتي 🚀</button>";
-  document.getElementById('go_rep_now').onclick = () => {
-     closeModal(); view = 'reports'; reportMonth = ymPrev; render();
-  };
+  document.getElementById('go_rep_now').onclick = () => { closeModal(); view = 'reports'; reportMonth = ymPrev; render(); };
   document.getElementById('overlay').classList.add('show');
 };
 
@@ -2432,36 +2426,21 @@ window.openReportTourIntro = function() {
   document.getElementById('mTitle').textContent = 'جولة سريعة: إزاي تسجل تقاريرك؟ 🚀';
   document.getElementById('mBody').innerHTML = "<div style='text-align:center;padding:10px 0'><div style='font-size:44px;margin-bottom:10px'>📊</div><div style='font-size:17px;font-weight:900;margin-bottom:8px'>التقارير بقت أسهل وأدق!</div><div style='font-size:13.5px;color:var(--muted);line-height:1.6'>عشان التقييم يكون عادل، التقارير بقت بتطلب منك تحدد الشهر بالظبط. يلا ناخد جولة سريعة 30 ثانية نشوف بتتسجل إزاي عملي.</div></div>";
   document.getElementById('mFoot').innerHTML = "<button class='btn primary' id='start_rep_tour' style='flex:1'>يلا نبدأ الجولة 🎯</button>";
-  document.getElementById('start_rep_tour').onclick = () => {
-     localStorage.setItem('seen_report_tour_v8', 'true');
-     closeModal();
-     startReportMiniTour();
-  };
+  document.getElementById('start_rep_tour').onclick = () => { localStorage.setItem('seen_report_tour_v8', 'true'); closeModal(); startReportMiniTour(); };
   document.getElementById('overlay').classList.add('show');
 };
 
-// --- نظام الجولة التفاعلية اللي بيشاور على العناصر ---
 let repTourStep = 0;
 let repTourTid = null;
 
 window.startReportMiniTour = function() {
   view = 'reports'; render();
   setTimeout(() => {
-      // الحل الجذري للأدمن: نجيب المدرسين اللي في نطاق رؤيتك (مش بتوعك شخصياً بس)
       const ids = scopeIds();
       const visibleTeachers = TEACHERS.filter(t => ids.includes(t.owner_id));
-      
       const firstBtn = document.querySelector('.rank-row .btn');
-      
-      if (!firstBtn || visibleTeachers.length === 0) {
-         toast('مفيش مدرسين نطبق عليهم عملي!');
-         setTimeout(checkAndShowNagModal, 1000);
-         return;
-      }
-      
-      // نربط الجولة بأول مدرس ظاهر قدامك عشان النافذة تفتح صح
+      if (!firstBtn || visibleTeachers.length === 0) { toast('مفيش مدرسين نطبق عليهم عملي!'); setTimeout(checkAndShowNagModal, 1000); return; }
       repTourTid = visibleTeachers[0].id;
-      
       repTourStep = 1;
       runRepTourStep();
   }, 400); 
@@ -2471,70 +2450,44 @@ window.runRepTourStep = function() {
    const backdrop = document.getElementById('tourBackdrop');
    const pop = document.getElementById('tourPop');
    const spot = document.getElementById('tourSpot');
-   
    backdrop.classList.add('show');
-   
    if (repTourStep === 1) {
        const btn = document.querySelector('.rank-row .btn');
-       if(!btn) return endRepTourAndContinue();
+       if(!btn) return endRepTour();
        btn.scrollIntoView({block:'center', behavior:'smooth'});
-       
        setTimeout(() => {
            const r = btn.getBoundingClientRect();
-           spot.style.display='block';
-           spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
+           spot.style.display='block'; spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
            spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
-           
            pop.style.display='block';
            pop.innerHTML = "<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p><div class='row'><div class='btns'><button class='primary' onclick='clickRepTourBtn()'>👆 دوس على الزرار هنا</button></div></div>";
-           
-           let pTop = r.bottom + 16;
-           if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
-           pop.style.top = pTop + 'px';
-           pop.style.left = Math.max(10, r.left - 200) + 'px';
+           let pTop = r.bottom + 16; if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
+           pop.style.top = pTop + 'px'; pop.style.left = Math.max(10, r.left - 200) + 'px';
        }, 350);
-   } 
-   else if (repTourStep === 2) {
+   } else if (repTourStep === 2) {
        const sel = document.getElementById('r_ym');
-       if(!sel) return endRepTourAndContinue();
-       
+       if(!sel) return endRepTour();
        const r = sel.getBoundingClientRect();
-       spot.style.display='block';
-       spot.style.top=(r.top-4)+'px'; spot.style.left=(r.left-4)+'px';
+       spot.style.display='block'; spot.style.top=(r.top-4)+'px'; spot.style.left=(r.left-4)+'px';
        spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
-       
        pop.style.display='block';
-       pop.innerHTML = "<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p><div class='row'><div class='btns'><button class='primary' onclick='endRepTourAndContinue()'>فهمت، شكراً 👍</button></div></div>";
-       
-       pop.style.top=(r.bottom+16)+'px';
-       pop.style.left=Math.max(10, r.left - 150)+'px';
+       pop.innerHTML = "<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p><div class='row'><div class='btns'><button class='primary' onclick='endRepTour()'>فهمت، شكراً 👍</button></div></div>";
+       pop.style.top=(r.bottom+16)+'px'; pop.style.left=Math.max(10, r.left - 150)+'px';
    }
 };
 
 window.clickRepTourBtn = function() {
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
-   
-   if(repTourTid) {
-       openReport(repTourTid);
-       repTourStep = 2;
-       setTimeout(runRepTourStep, 500); 
-   } else {
-       endRepTourAndContinue();
-   }
-};
-
-window.endRepTourAndContinue = function() {
-   document.getElementById('tourBackdrop').classList.remove('show');
-   document.getElementById('tourSpot').style.display='none';
-   document.getElementById('tourPop').style.display='none';
-   setTimeout(checkAndShowNagModal, 600); 
+   if(repTourTid) { openReport(repTourTid); repTourStep = 2; setTimeout(runRepTourStep, 500); }
+   else { endRepTour(); }
 };
 
 window.endRepTour = function() {
    document.getElementById('tourBackdrop').classList.remove('show');
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
+   setTimeout(checkAndShowNagModal, 600); 
 };
 };
 window.openAnnounce=function(){
