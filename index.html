@@ -2366,6 +2366,7 @@ function checkUpdate(){
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول
+// بيقرّر أنهي رسالة تظهر بعد الدخول
 function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
@@ -2385,7 +2386,7 @@ function postLoadModals(){
 
   if (shouldShowTour) {
      openReportTourIntro();
-     return; // بيشغل الجولة ويقف هنا.. رسالة الزن هتشتغل لما الجولة تخلص
+     return;
   }
 
   // 2. رسالة الزن (لو مفيش جولة)
@@ -2394,7 +2395,6 @@ function postLoadModals(){
   }
 }
 
-// دالة منفصلة لرسالة الزن عشان ننده عليها براحتنا
 window.checkAndShowNagModal = function() {
      const ymPrev = shiftYm(ymNow(), -1);
      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
@@ -2447,14 +2447,20 @@ let repTourTid = null;
 window.startReportMiniTour = function() {
   view = 'reports'; render();
   setTimeout(() => {
+      // الحل الجذري للأدمن: نجيب المدرسين اللي في نطاق رؤيتك (مش بتوعك شخصياً بس)
+      const ids = scopeIds();
+      const visibleTeachers = TEACHERS.filter(t => ids.includes(t.owner_id));
+      
       const firstBtn = document.querySelector('.rank-row .btn');
-      if (!firstBtn) {
-         toast('مفيش مدرسين معاك لسه نطبق عليهم عملي!');
+      
+      if (!firstBtn || visibleTeachers.length === 0) {
+         toast('مفيش مدرسين نطبق عليهم عملي!');
          setTimeout(checkAndShowNagModal, 1000);
          return;
       }
-      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
-      if(myTeachers.length > 0) repTourTid = myTeachers[0].id;
+      
+      // نربط الجولة بأول مدرس ظاهر قدامك عشان النافذة تفتح صح
+      repTourTid = visibleTeachers[0].id;
       
       repTourStep = 1;
       runRepTourStep();
@@ -2522,20 +2528,14 @@ window.endRepTourAndContinue = function() {
    document.getElementById('tourBackdrop').classList.remove('show');
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
-   
-   // هنا رسالة الزن بتشتغل فوراً بعد ما الجولة التفاعلية تخلص!
    setTimeout(checkAndShowNagModal, 600); 
-};
-window.endRepTour = function() {
-   document.getElementById('tourBackdrop').classList.remove('show');
-   document.getElementById('tourSpot').style.display='none';
-   document.getElementById('tourPop').style.display='none';
 };
 
 window.endRepTour = function() {
    document.getElementById('tourBackdrop').classList.remove('show');
    document.getElementById('tourSpot').style.display='none';
    document.getElementById('tourPop').style.display='none';
+};
 };
 window.openAnnounce=function(){
   if(!ANNOUNCE)return;
