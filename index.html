@@ -2359,23 +2359,50 @@ function checkUpdate(){
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
+// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
   if(ANNOUNCE && ANNOUNCE.v && (ME.seen_announce||0) < ANNOUNCE.v){ openAnnounce(); return; }
 
-  // 1. جولة التقارير الجديدة
-  if (!localStorage.getItem('seen_report_tour_v3')) {
-     openReportTourIntro();
-     return;
+  const d = new Date();
+
+  // 1. جولة التقارير الجديدة (أول 10 أيام في الشهر بس)
+  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v5')) {
+     // تأجيل الجولة لـ "إيمان" و "محمد زكريا" الشهر ده (هتظهرلهم الشهر الجاي)
+     const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
+     const isThisMonth = ymNow() === '2026-07'; // شهر 7 الحالي
+     
+     // لو احنا في شهر 7 وده واحد من الموظفين دول، عدي الجولة الشهر ده. غير كده طلعها.
+     if (!(isThisMonth && isDelayedUser)) {
+         openReportTourIntro();
+         return;
+     }
   }
 
-  // 2. رسالة الزن بتاعة أول الشهر
-  const d = new Date();
+  // 2. رسالة الزن بتاعة أول الشهر (أول 10 أيام بس)
   if (d.getDate() <= 10 && !window.hasNaggedSession) {
      const ymPrev = shiftYm(ymNow(), -1);
      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
-     const missing = myTeachers.filter(t => !getReport(t.id, ymPrev));
+     
+     // 👇 أسماء المدرسين المعفيين الشهر ده
+     const exemptedTeachers = ["كريم فرعون", "الالفي", "سعيد الفقي"];
+
+     const missing = myTeachers.filter(t => {
+        if (getReport(t.id, ymPrev)) return false; 
+        
+        // لو اسم المدرس في قائمة الإعفاء، سيبه في حاله
+        if (exemptedTeachers.includes(t.name.trim())) return false;
+
+        if (t.assigned_at) {
+           const assignMonth = t.assigned_at.slice(0, 7);
+           const assignDay = parseInt(t.assigned_at.slice(8, 10));
+           if (assignMonth > ymPrev) return false;
+           if (assignMonth === ymPrev && assignDay > 20) return false;
+        }
+        return true; 
+     });
+
      if (missing.length > 0) {
         window.hasNaggedSession = true; 
         openNagModal(ymPrev, missing);
@@ -2409,7 +2436,7 @@ window.openReportTourIntro = function() {
     </div>`;
   document.getElementById('mFoot').innerHTML = `<button class="btn primary" id="start_rep_tour" style="flex:1">يلا نبدأ الجولة 🎯</button>`;
   document.getElementById('start_rep_tour').onclick = () => {
-     localStorage.setItem('seen_report_tour_v3', 'true');
+     localStorage.setItem('seen_report_tour_v5', 'true');
      closeModal();
      startReportMiniTour();
   };
@@ -2419,7 +2446,6 @@ window.openReportTourIntro = function() {
 window.startReportMiniTour = function() {
   view = 'reports'; render();
   
-  // تأخير بسيط عشان الشاشة تلحق تحمل وتترسم قبل ما الجولة تشتغل
   setTimeout(() => {
       const firstBtn = document.querySelector('.rank-row .btn');
       if (!firstBtn) {
@@ -2441,7 +2467,7 @@ window.startReportMiniTour = function() {
                   tourList.push({ sel:'#r_ym', title:'أهم خطوة: اختار الشهر! ⚠️', text:'القايمة دي بتسألك التقرير ده بتاع شهر إيه. اتأكد إنك مختار الشهر الصح.' });
                   tourList.push({ sel:'#r_save', title:'حفظ التقرير', text:'بعد ما تدخل الأرقام والإثبات، دوس حفظ. وكده مبروك التقفيلة! 🎉' });
                   showTourStep();
-               }, 500); // استنى النافذة تفتح براحتها
+               }, 500); 
             } else { window.endTour(); }
             return;
          }
@@ -2463,7 +2489,7 @@ window.startReportMiniTour = function() {
       tourIdx = 0;
       document.getElementById('tourBackdrop').classList.add('show');
       showTourStep();
-  }, 350); // هنا التأخير اللي بيمنع الـ Freeze
+  }, 350); 
 };
 window.openAnnounce=function(){
   if(!ANNOUNCE)return;
