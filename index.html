@@ -2360,6 +2360,7 @@ function checkUpdate(){
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 // بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
+// بيقرّر أنهي رسالة تظهر بعد الدخول (واحدة بس، بالأولوية: ترحيب ← تحديث الكود ← إعلان الأدمن)
 function postLoadModals(){
   if(ME.seen_role!==ME.role){ const promoted=ME.seen_role&&ME.seen_role!==ME.role; openGuide({welcome:true,promoted}); return; }
   if((ME.seen_update||0) < LATEST_UPDATE.v){ openUpdate(); return; }
@@ -2368,12 +2369,10 @@ function postLoadModals(){
   const d = new Date();
 
   // 1. جولة التقارير الجديدة (أول 10 أيام في الشهر بس)
-  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v5')) {
-     // تأجيل الجولة لـ "إيمان" و "محمد زكريا" الشهر ده (هتظهرلهم الشهر الجاي)
+  if (d.getDate() <= 10 && !localStorage.getItem('seen_report_tour_v6')) {
      const isDelayedUser = ME.name.includes('ايمان') || ME.name.includes('إيمان') || ME.name.includes('محمد ذكريا') || ME.name.includes('محمد زكريا');
-     const isThisMonth = ymNow() === '2026-07'; // شهر 7 الحالي
+     const isThisMonth = ymNow() === '2026-07'; 
      
-     // لو احنا في شهر 7 وده واحد من الموظفين دول، عدي الجولة الشهر ده. غير كده طلعها.
      if (!(isThisMonth && isDelayedUser)) {
          openReportTourIntro();
          return;
@@ -2384,16 +2383,11 @@ function postLoadModals(){
   if (d.getDate() <= 10 && !window.hasNaggedSession) {
      const ymPrev = shiftYm(ymNow(), -1);
      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
-     
-     // 👇 أسماء المدرسين المعفيين الشهر ده
      const exemptedTeachers = ["كريم فرعون", "الالفي", "سعيد الفقي"];
 
      const missing = myTeachers.filter(t => {
         if (getReport(t.id, ymPrev)) return false; 
-        
-        // لو اسم المدرس في قائمة الإعفاء، سيبه في حاله
         if (exemptedTeachers.includes(t.name.trim())) return false;
-
         if (t.assigned_at) {
            const assignMonth = t.assigned_at.slice(0, 7);
            const assignDay = parseInt(t.assigned_at.slice(8, 10));
@@ -2436,12 +2430,16 @@ window.openReportTourIntro = function() {
     </div>`;
   document.getElementById('mFoot').innerHTML = `<button class="btn primary" id="start_rep_tour" style="flex:1">يلا نبدأ الجولة 🎯</button>`;
   document.getElementById('start_rep_tour').onclick = () => {
-     localStorage.setItem('seen_report_tour_v5', 'true');
+     localStorage.setItem('seen_report_tour_v6', 'true');
      closeModal();
      startReportMiniTour();
   };
   document.getElementById('overlay').classList.add('show');
 };
+
+// نظام جولة منفصل تماماً مبيضربش
+let repTourStep = 0;
+let repTourTid = null;
 
 window.startReportMiniTour = function() {
   view = 'reports'; render();
@@ -2454,42 +2452,86 @@ window.startReportMiniTour = function() {
          return;
       }
       
-      window._origNextTour = window.nextTour;
-      window._origEndTour = window.endTour;
+      const myTeachers = TEACHERS.filter(t => t.owner_id === ME.id);
+      if(myTeachers.length > 0) repTourTid = myTeachers[0].id;
       
-      window.nextTour = function() {
-         clearTourEl(); tourIdx++;
-         if (tourIdx === 2) {
-            const btn = document.querySelector('.rank-row .btn');
-            if(btn) {
-               btn.click(); 
-               setTimeout(() => {
-                  tourList.push({ sel:'#r_ym', title:'أهم خطوة: اختار الشهر! ⚠️', text:'القايمة دي بتسألك التقرير ده بتاع شهر إيه. اتأكد إنك مختار الشهر الصح.' });
-                  tourList.push({ sel:'#r_save', title:'حفظ التقرير', text:'بعد ما تدخل الأرقام والإثبات، دوس حفظ. وكده مبروك التقفيلة! 🎉' });
-                  showTourStep();
-               }, 500); 
-            } else { window.endTour(); }
-            return;
-         }
-         if (tourIdx >= tourList.length) { window.endTour(); return; }
-         showTourStep();
-      };
-      
-      window.endTour = function() {
-         window.nextTour = window._origNextTour;
-         window.endTour = window._origEndTour;
-         window.endTour();
-         setTimeout(postLoadModals, 600); 
-      };
-      
-      tourList = [
-        {sel:'.page-title', title:'صفحة التقارير 📊', text:'هنا بتقدر تتابع وتسجل أرقام كل مدرس بتمسكه.'},
-        {sel:'.rank-row .btn', title:'إضافة تقرير', text:'هندوس على زرار (إضافة تقرير) ده عشان نفتح النافذة.'}
-      ];
-      tourIdx = 0;
-      document.getElementById('tourBackdrop').classList.add('show');
-      showTourStep();
-  }, 350); 
+      repTourStep = 1;
+      runRepTourStep();
+  }, 400); 
+};
+
+window.runRepTourStep = function() {
+   const backdrop = document.getElementById('tourBackdrop');
+   const pop = document.getElementById('tourPop');
+   const spot = document.getElementById('tourSpot');
+   
+   backdrop.classList.add('show');
+   
+   if (repTourStep === 1) {
+       const btn = document.querySelector('.rank-row .btn');
+       if(!btn) return endRepTour();
+       btn.scrollIntoView({block:'center', behavior:'smooth'});
+       
+       setTimeout(() => {
+           const r = btn.getBoundingClientRect();
+           spot.style.display='block';
+           spot.style.top=(r.top-6)+'px'; spot.style.left=(r.left-6)+'px';
+           spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
+           
+           pop.style.display='block';
+           pop.innerHTML=\`<h4>إضافة تقرير</h4><p>عشان نبدأ، دوس على الزرار ده لأول مدرس عندك.</p>
+              <div class="row">
+                 <div class="btns"><button class="primary" onclick="clickRepTourBtn()">👆 دوس على الزرار هنا</button></div>
+              </div>\`;
+           
+           let pTop = r.bottom + 16;
+           if (pTop + 150 > window.innerHeight) pTop = r.top - 160;
+           pop.style.top = pTop + 'px';
+           pop.style.left = Math.max(10, r.left - 200) + 'px';
+       }, 350);
+   } 
+   else if (repTourStep === 2) {
+       const sel = document.getElementById('r_ym');
+       if(!sel) return endRepTour();
+       
+       const r = sel.getBoundingClientRect();
+       spot.style.display='block';
+       spot.style.top=(r.top-4)+'px'; spot.style.left=(r.left-4)+'px';
+       spot.style.width=(r.width+8)+'px'; spot.style.height=(r.height+8)+'px';
+       
+       pop.style.display='block';
+       pop.innerHTML=\`<h4>اختار الشهر ⚠️</h4><p>دي أهم خطوة! اتأكد إنك مختار الشهر اللي التقرير بتاعه قبل ما تكتب أي رقم.</p>
+          <div class="row">
+             <div class="btns"><button class="primary" onclick="endRepTourAndContinue()">فهمت، شكراً 👍</button></div>
+          </div>\`;
+       
+       pop.style.top=(r.bottom+16)+'px';
+       pop.style.left=Math.max(10, r.left - 150)+'px';
+   }
+};
+
+window.clickRepTourBtn = function() {
+   document.getElementById('tourSpot').style.display='none';
+   document.getElementById('tourPop').style.display='none';
+   
+   if(repTourTid) {
+       openReport(repTourTid);
+       repTourStep = 2;
+       setTimeout(runRepTourStep, 500); // استنى النافذة تفتح
+   } else {
+       endRepTourAndContinue();
+   }
+};
+
+window.endRepTourAndContinue = function() {
+   endRepTour();
+   setTimeout(postLoadModals, 600); // يكمل ويشوف رسالة الزن لو محتاج
+};
+
+window.endRepTour = function() {
+   document.getElementById('tourBackdrop').classList.remove('show');
+   document.getElementById('tourSpot').style.display='none';
+   document.getElementById('tourPop').style.display='none';
 };
 window.openAnnounce=function(){
   if(!ANNOUNCE)return;
