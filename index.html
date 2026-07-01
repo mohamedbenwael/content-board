@@ -2230,9 +2230,13 @@ window.backupNow=async function(btn){
 };
 window.openReport=function(teacherId){
   const t=T(teacherId), ym=reportMonth||ymNow(), r=getReport(teacherId,ym);
-  document.getElementById('mTitle').textContent=`تقرير ${t.name} — ${ymLabel(ym)}`;
+  document.getElementById('mTitle').textContent=`تقرير أستاذ ${t.name}`;
   document.getElementById('mBody').innerHTML=`
-    <div class="lt-empty" style="margin-bottom:4px">📤 السايت سجّل <b>${monthPosts(teacherId,ym)}</b> بوست منشور للمدرّس ده الشهر ده. أنت بتضيف أرقام فيسبوك تحت.</div>
+    <div class="field" style="margin-bottom:14px">
+      <label>التقرير ده بيسجل أرقام شهر إيه؟</label>
+      <input disabled value="📊 شهر ${ymLabel(ym)}" style="background:var(--brand-dim);color:var(--brand);font-weight:900;text-align:center;font-size:15.5px;border:1px solid var(--brand)">
+    </div>
+    <div class="lt-empty" style="margin-bottom:12px;font-size:12.5px;line-height:1.6">📤 السايت سجّل <b>${monthPosts(teacherId,ym)}</b> بوست منشور للمدرّس ده في الشهر ده. دخّل أرقام فيسبوك تحت:</div>
     <div class="two"><div class="field"><label>متابعين جداد +</label><input type="number" id="r_foll" value="${r?(r.new_followers||0):''}" placeholder="0"></div>
       <div class="field"><label>المشاهدات</label><input type="number" id="r_views" value="${r?(r.views||0):''}" placeholder="0"></div></div>
     <div class="field"><label>التفاعل (لايكات + كومنتات + شير)</label><input type="number" id="r_eng" value="${r?(r.engagement||0):''}" placeholder="0"></div>
@@ -2240,7 +2244,7 @@ window.openReport=function(teacherId){
     <div style="text-align:center;color:var(--faint);font-size:12px;margin:-4px 0">— أو —</div>
     <div class="field"><label>الإثبات ② — ارفع ملف (صورة / PDF)</label><input type="file" id="r_file" accept="image/*,application/pdf">${r&&r.proof_file?`<a href="${escAttr(r.proof_file)}" target="_blank" style="font-size:12px;color:var(--brand)">📎 الملف المرفوع حاليًا</a>`:''}</div>
     <div class="lt-empty" style="margin:-2px 0 2px;font-size:11.5px">لازم تحط واحد منهم على الأقل — لينك أو ملف.</div>
-    <div class="field"><label>ملاحظات (اختياري)</label><input id="r_notes" value="${r?escAttr(r.notes||''):''}" placeholder="أي ملاحظة عن أداء الشهر…"></div>`;
+    <div class="field"><label>ملاحظات (اختياري)</label><input id="r_notes" value="${r?escAttr(r.notes||''):''}" placeholder="أي ملاحظة عن أداء الشهر…"></div>`;;
   let acts=`<button class="btn primary" id="r_save">${r?'حفظ':'إضافة التقرير'}</button>`;
   if(r)acts+=`<button class="danger-link" id="r_del" style="margin-inline-start:auto;background:none;border:none">مسح</button>`;
   document.getElementById('mFoot').innerHTML=acts;
