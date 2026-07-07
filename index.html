@@ -448,7 +448,8 @@ function weekEnd(d){ const s=weekStart(d); const e=new Date(s); e.setDate(s.getD
 // عدّ بوستات مدرّس حسب النوع في فترة (من publish_log مربوط بالكارت لمعرفة الـcategory)
 function teacherCatCounts(teacherId, fromYmd, toYmd){
   const counts={}; CATS.forEach(c=>counts[c]=0); counts['غير مصنّف']=0;
-  PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=fromYmd && l.pub_date<=toYmd).forEach(l=>{
+  // بس التسجيلات المربوطة بكارت (ليها نوع) — التسجيل اليدوي من التقويم (card_id فاضي) بيتجاهل
+  PUBLOG.filter(l=>l.teacher_id===teacherId && l.card_id && l.pub_date>=fromYmd && l.pub_date<=toYmd).forEach(l=>{
     const card=CARDS.find(x=>x.id===l.card_id);
     const cat=card&&card.category?card.category:'غير مصنّف';
     if(counts[cat]===undefined)counts[cat]=0; counts[cat]++;
@@ -547,6 +548,15 @@ let complianceWeek='cur'; // 'cur' | 'prev' — أسبوع تنبيهات الا
 let rankMonth=null; // شهر التقييم المعروض (افتراضي: الشهر اللي فات)
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
 let EXEMPTIONS={}; // إعفاءات التقارير { teacherId: {type:'permanent'|'month', ym?} }
+let STOPPED=[]; // مدرّسين موقوفين (مش بيتحسبوا في أي حاجة) — array of teacher ids
+function isTeacherStopped(id){ return STOPPED.includes(id); }
+async function setTeacherStopped(id,stop){
+  if(stop){ if(!STOPPED.includes(id)) STOPPED.push(id); }
+  else { STOPPED=STOPPED.filter(x=>x!==id); }
+  const {error}=await sb.from('app_settings').upsert({key:'stopped_teachers', value:STOPPED, updated_at:new Date().toISOString()},{onConflict:'key'});
+  if(error){ toast(error.message,true); return false; }
+  return true;
+}
 let TREVIEWS=[]; // تقييمات متابعة المدرّسين
 const TR_CRITERIA=[{k:'reply',name:'سرعة الرد',ico:'⚡'},{k:'satis',name:'رضا المدرّس',ico:'😀'},{k:'comm',name:'التواصل',ico:'🤝'},{k:'exec',name:'تنفيذ الطلبات',ico:'✅'}];
 const TR_OPTS=[{v:3,name:'كويس'},{v:2,name:'مقبول'},{v:1,name:'سيء'}];
@@ -680,13 +690,14 @@ async function reload(){
     sb.from('teachers').select('*'),
     sb.from('notifications').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(50),
     sb.from('monthly_reports').select('*'),
-    sb.from('app_settings').select('*').in('key',['announcement','report_exemptions']),
+    sb.from('app_settings').select('*').in('key',['announcement','report_exemptions','stopped_teachers']),
     sb.from('teacher_reviews').select('*'),
   ]);
   PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
   { const rows=small[4].data||[];
     const a=rows.find(r=>r.key==='announcement'); ANNOUNCE=a?a.value:null;
     const e=rows.find(r=>r.key==='report_exemptions'); EXEMPTIONS=(e&&e.value)?e.value:{};
+    const st=rows.find(r=>r.key==='stopped_teachers'); STOPPED=(st&&st.value)?st.value:[];
   }
   TREVIEWS=small[5].data||[];
 
@@ -807,13 +818,13 @@ function memberPosts(memberId, ym){
 }
 // إجمالي الأيام الفايتة المحتسبة (بعد سماح يوم/أسبوع) عبر كل مدرّسين العضو
 function memberMissed(memberId, ym){
-  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id, ym).counted,0);
+  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+teacherMissInfo(t.id, ym).counted,0);
 }
 function memberForgiven(memberId, ym){
-  return TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+teacherMissInfo(t.id, ym).forgiven,0);
+  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+teacherMissInfo(t.id, ym).forgiven,0);
 }
 function memberTeacherBreakdown(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
+  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
 }
 // متوسط جودة شغل العضو الشهر ده (من تقييم القائد) — 0..1 أو null لو مفيش تقييمات
 function memberQuality(memberId, ym){
@@ -827,7 +838,7 @@ function memberQuality(memberId, ym){
 // بيقيس التحسن النسبي مش الأرقام الخام عشان يكون عادل بين الصفحات الكبيرة والصغيرة
 function memberGrowthScore(memberId, ym){
   const curYm=ym||ymNow();
-  const ts=TEACHERS.filter(t=>t.owner_id===memberId);
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   if(!ts.length) return null;
   const av=a=>a.reduce((x,y)=>x+y,0)/a.length;
   // إجمالي شهر معيّن (لكل مدرّسي الموظف اللي ليهم تقرير الشهر ده)
@@ -856,7 +867,7 @@ function memberGrowthScore(memberId, ym){
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
 function memberBalanceScore(memberId, ym){
   ym = ym || ymNow();
-  const ts=TEACHERS.filter(t=>t.owner_id===memberId);
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   if(!ts.length) return null;
   const mStart=monthStartOf(ym);
   const [yy,mm]=ym.split('-').map(Number);
@@ -885,7 +896,7 @@ function memberBalanceScore(memberId, ym){
 // إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
 function memberManageScore(memberId){
   const ym=shiftYm(ymNow(),-1); // الشهر اللي فات
-  const ts=TEACHERS.filter(t=>t.owner_id===memberId);
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   const vals=[];
   ts.forEach(t=>{const r=getTReview(t.id,ym); if(r){[r.reply,r.satis,r.comm,r.exec].forEach(v=>{if(v)vals.push(v);});}});
   if(!vals.length) return null;
@@ -897,7 +908,7 @@ function memberManageScore(memberId){
 function memberScore(memberId, ym){
   ym = ym || ymNow();
   const isCur = (ym===ymNow());
-  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId).reduce((s,t)=>s+expectedDays(t, ym).length,0);
+  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+expectedDays(t, ym).length,0);
   const forgiven=memberForgiven(memberId, ym);
   const expectedTotal=Math.max(0,expectedRaw-forgiven);
   const posts=memberPosts(memberId, ym);
@@ -1519,7 +1530,7 @@ function teacherCards(){
 function complianceTeachers(){
   if(ME.role==='admin') return TEACHERS.slice();
   const ids=scopeIds();
-  return TEACHERS.filter(t=>ids.includes(t.owner_id));
+  return TEACHERS.filter(t=>ids.includes(t.owner_id) && !isTeacherStopped(t.id));
 }
 // عدد المدرّسين اللي عندهم مخالفات الأسبوع ده (للعدّاد في القايمة)
 function complianceCount(){
@@ -1535,7 +1546,7 @@ function memberBalanceBlock(){
 
   const cards=membersWithTeachers.map(memberId=>{
     const m=U(memberId);
-    const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId);
+    const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
     const teacherRows=mTeachers.map(t=>{
       const {counts,issues}=teacherWeekCompliance(t.id);
       const chips=COMPLIANCE_RULES.map(r=>{
@@ -1586,7 +1597,9 @@ function complianceView(){
   const weekStatus=todayIsWeekEnd?'⏳ آخر يوم في الأسبوع':'🔄 الأسبوع لسه شغّال — قواعد «الحد الأدنى» بتتحسب بعد ما يخلص';
   const head=`<div class="page-head"><div><div class="page-title">التزام المحتوى الأسبوعي</div>
     <div class="page-sub">الأسبوع الحالي (${weekLbl}) · ${weekStatus}</div>
-    <div class="page-sub" style="margin-top:4px">القاعدة: كوميكس حد أقصى ٢ · ريلز ٢ على الأقل · ديزاين ٢ على الأقل</div></div></div>`;
+    <div class="page-sub" style="margin-top:4px">القاعدة: كوميكس حد أقصى ٢ · ريلز ٢ على الأقل · ديزاين ٢ على الأقل</div>
+    ${(ME.role==='admin'||ME.role==='manager')&&!window.viewAsId?`<button class="btn" style="margin-top:10px" onclick="backfillPublished()">🔄 سجّل نشر كل الكروت اللي في «اتنشر»</button>`:''}
+    </div></div>`;
   if(!ts.length) return head+`<div class="empty"><div class="big">🎓</div>مفيش مدرّسين في نطاقك.</div>`;
   // قسم balance الفريق (للتيم ليدر والمانجر)
   const teamBlock=memberBalanceBlock();
@@ -1612,13 +1625,15 @@ function complianceView(){
       return `<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${col};margin-top:4px">${is.kind==='over'?'🔴':'🟠'} <span><b>${is.rule.label}:</b> ${verb}</span></div>`;
     }).join('');
     const okBadge=!c.issues.length?`<span class="due" style="background:var(--ready)22;color:var(--ready)">✓ ملتزم</span>`:`<span class="due late">⚠ ${c.issues.length} ملاحظة</span>`;
+    const unclassified=c.counts['غير مصنّف']||0;
+    const uncHint = unclassified>0 ? `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--pub);margin-top:4px">📌 <span>فيه <b>${unclassified}</b> بوست منشور من غير نوع محدّد — حدّد نوعه (ريل/ديزاين/كوميكس) عشان يتحسب</span></div>` : '';
     return `<div class="card" style="cursor:pointer;margin:0" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
         <div style="flex:1"><div class="ttl" style="margin:0">${esc(t.name)}</div>
         <div style="font-size:11.5px;color:var(--muted);margin-top:2px">المسؤول: ${owner.name||'—'}</div></div>
         ${okBadge}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">${chips}</div>
-      ${issues}</div>`;
+      ${issues}${uncHint}</div>`;
   }).join('');
   return head+`<div style="max-width:820px">${teamBlock}${summary}<div style="display:flex;flex-direction:column;gap:10px">${body}</div></div>`;
 }
@@ -1841,6 +1856,17 @@ function miniCalendar(t){
   }
   return `<div class="cal">${cells}</div><div style="font-size:10.5px;color:var(--faint);margin-top:6px">🟢 نزل · 🔴 فات · ⚪ إجازة الأسبوع (أول يوم فايت بيتسامح)${canBackdate?' · دوس على يوم أحمر تسجّل فيه نشر':''}</div>`;
 }
+window.backfillPublished=async function(){
+  if(!(ME.role==='admin'||ME.role==='manager')||window.viewAsId) return;
+  const ids=scopeIds();
+  const targets=CARDS.filter(c=>(c.kind||'post')==='post' && c.status==='published' && c.teacher_id
+      && (ids.includes(c.assignee_id) || TEACHERS.some(t=>t.id===c.teacher_id && ids.includes(t.owner_id)))
+      && !PUBLOG.some(l=>l.card_id===c.id));
+  if(!targets.length){ toast('كل الكروت اللي في «اتنشر» متسجّلة خلاص ✓'); return; }
+  if(!confirm(`هيتسجّل نشر ${targets.length} بوست بتاريخ النهاردة عشان يتحسبوا في التوازن. تمام؟`)) return;
+  for(const c of targets){ await recordPublish(c, ymd(new Date())); }
+  await reload(); render(); toast(`اتسجّل ${targets.length} بوست ✓`);
+};
 window.recordBackdate=async function(tid,date){
   if(ME.role!=='admin'){toast('تسجيل نشر في يوم فات للأدمن بس',true);return;}
   const t=T(tid);
@@ -2007,8 +2033,13 @@ window.openTeacher=function(tid){
         <span id="t_avaPrev">${t?avaT(t.id,48):avaTag('new','?',48,null)}</span>
         <input type="file" id="t_photo" accept="image/*" style="font-size:12px">
       </div></div>`;
+  const canManageTeacher = (ME.role==='admin' || ME.role==='manager');
   let acts=`<button class="btn primary" id="t_save">${t?'حفظ':'إضافة المدرّس'}</button>`;
-  if(t && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id))) acts+=`<button class="danger-link" id="t_del" style="margin-inline-start:auto;background:none;border:none">مسح المدرّس</button>`;
+  if(t && canManageTeacher){
+    const stopped=isTeacherStopped(t.id);
+    acts+=`<button class="btn" id="t_stop" style="margin-inline-start:auto">${stopped?'▶ تفعيل':'⏸ إيقاف'}</button>`;
+    acts+=`<button class="danger-link" id="t_del" style="background:none;border:none">مسح</button>`;
+  }
   document.getElementById('mFoot').innerHTML=acts;
   document.getElementById('t_save').onclick=async()=>{
     const name=document.getElementById('t_name').value.trim(); if(!name)return toast('اكتب اسم المدرّس',true);
@@ -2026,16 +2057,28 @@ window.openTeacher=function(tid){
     if(error)return toast(error.message,true);
     await reload();closeModal();render();toast(t?'اتحفظ':'اتضاف المدرّس');
   };
-  const canDelTeacher = t && (ME.role==='admin' || t.owner_id===ME.id || descendantIds().includes(t.owner_id));
-  if(canDelTeacher) document.getElementById('t_del').onclick=async()=>{
-    if(confirm('متأكد تمسح المدرّس ده؟ هيتمسح من كل الأماكن.')){await sb.from('teachers').delete().eq('id',t.id);await reload();closeModal();if(view==='linktree')view='board';render();toast('اتمسح');}
-  };
+  if(t && canManageTeacher){
+    const stopEl=document.getElementById('t_stop');
+    if(stopEl) stopEl.onclick=async()=>{
+      const stopped=isTeacherStopped(t.id);
+      if(await setTeacherStopped(t.id, !stopped)){ closeModal(); render(); toast(stopped?'اترجّع المدرّس ✓':'اتوقف المدرّس — مش هيتحسب في أي حاجة'); }
+    };
+    const delEl=document.getElementById('t_del');
+    if(delEl) delEl.onclick=async()=>{
+      if(confirm('متأكد تمسح المدرّس ده نهائيًا؟ هيتمسح من كل الأماكن. (لو عايز توقفه بس بدل ما تمسحه استخدم «إيقاف»)')){
+        await sb.from('teachers').delete().eq('id',t.id);
+        STOPPED=STOPPED.filter(x=>x!==t.id);
+        await reload();closeModal();if(view==='linktree')view='board';render();toast('اتمسح');
+      }
+    };
+  }
   document.getElementById('overlay').classList.add('show');
 };
 
 /* ---------- link tree ---------- */
 function canEditTeacher(t){
   if(ME.role==='admin')return true;
+  if(ME.role==='manager')return true; // الأكونت مانجر يقدر يدير أي مدرّس (تعديل/إيقاف/مسح)
   if(t.owner_id===ME.id)return true;
   if(ME.role==='lead' && PROFILES.some(p=>p.id===t.owner_id && p.lead_id===ME.id))return true;
   return false;
@@ -2055,7 +2098,7 @@ function linkTreeView(){
   }).join('');
   return `<div class="page-head"><div style="display:flex;align-items:center;gap:14px">
       <span ${editable?`style="cursor:pointer" onclick="changeTeacherPhoto('${t.id}')" title="غيّر صورة المدرّس"`:''}>${avaT(t.id,64)}</span>
-      <div><div class="page-title">${t.name}</div>
+      <div><div class="page-title">${t.name}${isTeacherStopped(t.id)?' <span style="font-size:13px;color:var(--doing);font-weight:800">⏸ موقوف</span>':''}</div>
       <div class="page-sub">لينكات المدرّس · المسؤول: ${owner.name}${editable?' · دوس على الصورة تغيّرها':''}</div></div></div>
       ${editable?`<button class="btn" onclick="openTeacher('${t.id}')">⚙ تعديل المدرّس</button> <button class="btn primary" onclick="editLinks('${t.id}')">✎ تعديل اللينكات</button>`:''}</div>
     <div class="lt-wrap">${cards}</div>`;
@@ -2185,7 +2228,7 @@ function complianceSection(refDate, myTeachers){
 function reportsView(){
 if(!reportMonth)reportMonth=shiftYm(ymNow(),-1);  const ym=reportMonth;
   const ids=scopeIds();
-  const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id) && !isTeacherStopped(t.id));
   const nav=`<div class="week-nav" style="margin-bottom:18px"><button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
     <span class="label" style="font-weight:800;font-size:15px">${ymLabel(ym)}</span>
     <button onclick="reportMonth=shiftYm(reportMonth||'${ymNow()}',1);render()" style="width:auto;padding:0 14px;font-size:13px">الشهر التالي ›</button>
@@ -2502,7 +2545,7 @@ window.checkAndShowNagModal = function() {
      const ymPrev = shiftYm(ymNow(), -1);
      // نطاق المدرّسين حسب الدور: العضو = مدرّسينه · القائد/المانجر = كل اللي تحته
      const ids = scopeIds();
-     const myTeachers = TEACHERS.filter(t => ids.includes(t.owner_id));
+     const myTeachers = TEACHERS.filter(t => ids.includes(t.owner_id) && !isTeacherStopped(t.id));
 
      // الشهر الانتقالي: الشهر اللي اتعمل فيه السايت — تواريخ إضافة المدرّسين فيه مش حقيقية
      const SITE_START_MONTH = '2026-06';
@@ -2944,15 +2987,14 @@ window.openCard=function(id,newKind){
         priority:curPrio,effort:val('f_effort')?+val('f_effort'):null,due:val('f_due')||null,
         post_link:normUrl(val('f_link'))||null,caption:val('f_caption')||null,status:cur,quality:curQuality};
     }
-    let error;
+    let error, newCard=null;
     const wasPub = c && c.status==='published';
     if(c)({error}=await sb.from('cards').update(data).eq('id',c.id));
-    else ({error}=await sb.from('cards').insert({...data,created_by:ME.id}));
+    else { const r=await sb.from('cards').insert({...data,created_by:ME.id}).select().single(); error=r.error; newCard=r.data; }
     if(error)return toast(error.message,true);
     // إشعار: تاسك مطلوبة من قائد لعضو
     if(!c && isTask && data.requested_by){ await notify(data.assignee_id,'task_assigned',`${ME.name} بعتلك تاسك: ${t}${data.due?' — تسليمها '+data.due:''}`,null); }
     const pubTransition = (!isTask && cur==='published' && !wasPub);
-    if(pubTransition && !c){ const tid=val('f_teacher')||null, aid=val('f_assignee'); if(tid) await recordPublish({teacher_id:tid,assignee_id:aid,id:null}); }
     // إشعار: القائد قيّم بوست العضو
     if(!isTask && curQuality && (!c || c.quality!==curQuality) && data.assignee_id!==ME.id){
       await notify(data.assignee_id,'post_rated',`${ME.name} قيّم بوستك «${t}»: ${qualityName(curQuality)}`,c?c.id:null);
@@ -2962,7 +3004,7 @@ window.openCard=function(id,newKind){
       const lead=U(data.assignee_id).lead_id; if(lead) await notify(lead,'post_review',`${U(data.assignee_id).name} مستني مراجعتك على البوست: ${t}`,c?c.id:null);
     }
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
-    if(pubTransition && c){ openPublishDate(c.id); }
+    if(pubTransition){ const pid=c?c.id:(newCard&&newCard.id); if(pid) openPublishDate(pid); }
   };
   if(!isTask && c&&canApprove()&&c.status==='review'){
     document.getElementById('f_approve').onclick=async()=>{
@@ -3090,7 +3132,7 @@ async function checkBalanceAlerts(){
 
     const summaryLines=[], vioMembers=[];
     for(const memberId of members){
-      const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId);
+      const mTeachers=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
       if(!mTeachers.length) continue;
       const lines=mTeachers.map(teacherLine).filter(Boolean);
       const mName=U(memberId).name;
