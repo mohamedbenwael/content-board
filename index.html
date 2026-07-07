@@ -1916,6 +1916,10 @@ function manageView(){
     <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="font-size:13px;line-height:1.6">🧪 <b>تجربة الجولة والتحديثات</b><br><span style="color:var(--muted)">رجّع الجولة التعليمية ورسائل أول الشهر كأنك بتفتح السايت لأول مرة (للتجربة).</span></div>
       <button class="btn primary" style="height:38px;flex:none;background:var(--ready)" onclick="testLatestUpdate()">🔄 جرب الجولة دلوقتي</button>
+    </div>
+    <div class="lt-empty" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="font-size:13px;line-height:1.6">🔄 <b>بداية جديدة لعضو</b><br><span style="color:var(--muted)">اضبط تاريخ إسناد مدرّسي عضو معيّن للنهارده — التقييم هيبدأ من الصفر كأنهم اتسلّموا دلوقتي.</span></div>
+      <button class="btn" style="height:38px;flex:none;border-color:var(--review);color:var(--review)" onclick="openFreshStart()">↺ بداية جديدة</button>
     </div>`:''}`;
   if(people.length===0) return head+`<div class="empty"><div class="big">⚙</div>لسه محدش سجّل غيرك. ابعت لينك السايت لفريقك، وأول ما يعملوا حساب هيظهروا هنا تقدر ترقّيهم وتوزّعهم.</div>`;
   const card=p=>{
@@ -1971,6 +1975,71 @@ function manageView(){
   }
   return head+body;
 }
+window.openFreshStart=function(){
+  if(ME.role!=='admin'){toast('البداية الجديدة للأدمن بس',true);return;}
+  const members=PROFILES.filter(p=>p.role==='member'&&p.active!==false);
+  if(!members.length){toast('مفيش أعضاء',true);return;}
+  document.getElementById('mTitle').textContent='↺ بداية جديدة — إعادة ضبط التقييم';
+  document.getElementById('mBody').innerHTML=`
+    <div class="lt-empty" style="margin-bottom:14px;font-size:13px;line-height:1.7">
+      اختار العضو اللي عايز تبدأله تقييم جديد من النهارده.<br>
+      <span style="color:var(--danger);font-weight:700">⚠ كل مدرّسيه هيتعدّل تاريخ إسنادهم للنهارده</span><br>
+      <span style="color:var(--muted)">يعني الأيام اللي فاتت مش هتتحسب عليه ولا عليهم.</span>
+    </div>
+    <div class="field"><label>اختار العضو</label>
+      <select id="fs_member">
+        <option value="">— اختار عضو —</option>
+        ${members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="fs_preview" style="margin-top:12px"></div>`;
+  document.getElementById('mFoot').innerHTML=`
+    <button class="btn" onclick="closeModal()" style="flex:1">إلغاء</button>
+    <button class="btn primary" id="fs_confirm" style="flex:1;background:var(--review)" onclick="doFreshStart()" disabled>↺ تأكيد البداية الجديدة</button>`;
+  document.getElementById('fs_member').onchange=function(){
+    const id=this.value;
+    const btn=document.getElementById('fs_confirm');
+    const prev=document.getElementById('fs_preview');
+    if(!id){btn.disabled=true;prev.innerHTML='';return;}
+    const ts=TEACHERS.filter(t=>t.owner_id===id);
+    if(!ts.length){
+      prev.innerHTML='<div class="lt-empty" style="color:var(--muted)">العضو ده مالوش مدرّسين مسندين.</div>';
+      btn.disabled=true;
+    } else {
+      prev.innerHTML=`<div class="nav-group-label" style="margin:4px 0 8px;font-size:12px">المدرّسين اللي هيتعدّل تاريخ إسنادهم (${ts.length})</div>`+
+        ts.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+          ${avaT(t.id,28)}<span style="font-weight:700;font-size:13px">${t.name}</span>
+          <span style="margin-inline-start:auto;font-size:11px;color:var(--muted)">كان: ${t.assigned_at||'—'} → <b style="color:var(--ready)">${ymd(new Date())}</b></span>
+        </div>`).join('');
+      btn.disabled=false;
+    }
+  };
+  document.getElementById('overlay').classList.add('show');
+};
+window.doFreshStart=async function(){
+  if(ME.role!=='admin'){toast('البداية الجديدة للأدمن بس',true);return;}
+  const memberId=document.getElementById('fs_member').value;
+  if(!memberId)return;
+  const memberName=PROFILES.find(p=>p.id===memberId)?.name||'العضو';
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId);
+  if(!ts.length){toast('مفيش مدرّسين',true);return;}
+  const today=ymd(new Date());
+  const btn=document.getElementById('fs_confirm');
+  btn.disabled=true; btn.textContent='بيتحدّث…';
+  let errors=0;
+  for(const t of ts){
+    const {error}=await sb.from('teachers').update({assigned_at:today}).eq('id',t.id);
+    if(error){errors++;toast('خطأ في '+t.name+': '+error.message,true);}
+  }
+  await reload();
+  closeModal();
+  render();
+  if(!errors){
+    toast(`✅ تم! ${ts.length} مدرّس اتعدّلوا لـ ${memberName} — التقييم يبدأ من النهارده`);
+  } else {
+    toast(`تم جزئيًا (${errors} خطأ — شوف التفاصيل فوق)`,true);
+  }
+};
 window.setRole=async function(id,role){
   // changing role may invalidate parent; reset parent if it no longer fits
   const p=U(id); let lead=p.lead_id;
