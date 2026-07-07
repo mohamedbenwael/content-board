@@ -905,6 +905,29 @@ function memberManageScore(memberId){
 }
 
 // نقطة تقييم العضو: انتظام 35٪ + balance 30٪ + جودة 20٪ + نمو الصفحة 15٪
+// + معامل الأيام: النقطة الكاملة تتضرب في نسبة أيام العضو من أيام الشهر الكلية (عشان العدالة)
+function memberDaysFactor(memberId, ym){
+  // أقدم assigned_at بين مدرّسي العضو = أول يوم اشتغل فيه
+  ym = ym || ymNow();
+  const ts = TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  if(!ts.length) return 1;
+  // نحسب إجمالي أيام الشهر لحد إمبارح (نفس ما بيحسبه expectedDays لمدرّس بدأ من أول الشهر)
+  const monthStart = new Date(monthStartOf(ym));
+  let monthEnd;
+  if(ym===ymNow()){ monthEnd=new Date(); monthEnd.setHours(0,0,0,0); }
+  else { const [y,m]=ym.split('-').map(Number); monthEnd=new Date(y,m,1); }
+  const totalMonthDays = Math.max(1, Math.round((monthEnd-monthStart)/(1000*60*60*24)));
+  // أقدم أيام العضو (أقدم assigned_at بين مدرّسيه)
+  const earliest = ts.reduce((mn,t)=>{
+    if(!t.assigned_at) return mn;
+    const d=new Date(t.assigned_at+'T00:00:00');
+    return (!mn||d<mn)?d:mn;
+  }, null);
+  if(!earliest || earliest<=monthStart) return 1; // بدأ من أول الشهر أو قبله → معامل 1
+  const memberDays = Math.max(1, Math.round((monthEnd-earliest)/(1000*60*60*24)));
+  return memberDays / totalMonthDays;
+}
+
 function memberScore(memberId, ym){
   ym = ym || ymNow();
   const isCur = (ym===ymNow());
@@ -926,7 +949,7 @@ function memberScore(memberId, ym){
   const gScore=memberGrowthScore(memberId, ym);    
   
   if(pScore===null && bScore===null && qScore===null && gScore===null && posts<1)
-    return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null};
+    return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null, daysFactor:1};
   
   const parts=[];
   if(pScore!==null) parts.push([pScore,.35]);
@@ -935,13 +958,18 @@ function memberScore(memberId, ym){
   if(gScore!==null) parts.push([gScore,.15]);
   
   const totW=parts.reduce((s,p)=>s+p[1],0)||1;
-  const score=Math.round(parts.reduce((s,p)=>s+p[0]*p[1],0)/totW*100);
+  const rawScore=parts.reduce((s,p)=>s+p[0]*p[1],0)/totW;
+  
+  // معامل الأيام — بيخلي الحساب عادل للي بدأ من نص الشهر
+  const daysFactor = isCur ? memberDaysFactor(memberId, ym) : 1;
+  const score=Math.round(rawScore * daysFactor * 100);
   
   return {score, posts, missed,
     postingPct: pScore===null?null:Math.round(pScore*100),
     balancePct: bScore===null?null:Math.round(bScore*100),
     qualityPct: qScore===null?null:Math.round(qScore*100),
-    growthPct:  gScore===null?null:Math.round(gScore*100)};
+    growthPct:  gScore===null?null:Math.round(gScore*100),
+    daysFactor: Math.round(daysFactor*100)};
 }
 
 // تسجيل نشر في السجل (مرة واحدة لكل كارت في اليوم)
@@ -1707,6 +1735,7 @@ function rankSubLine(r) {
       ${r.balancePct != null ? `<span>⚖️ توازن ${r.balancePct}٪</span>` : '<span style="color:var(--faint)">⚖️ توازن لسه</span>'}
       ${r.qualityPct != null ? `<span>💡 جودة ${r.qualityPct}٪</span>` : '<span style="color:var(--faint)">💡 لسه ماتقيّمش</span>'}
       ${r.growthPct != null ? `<span>📈 نمو ${r.growthPct}٪</span>` : '<span style="color:var(--faint)">📈 نمو لسه</span>'}
+      ${(r.daysFactor != null && r.daysFactor < 100) ? `<span style="color:var(--muted);font-size:11px" title="بدأ من نص الشهر — النقطة اتضربت في نسبة أيامه">⏱ ${r.daysFactor}٪ من الشهر</span>` : ''}
     ` : `
       <span style="color:var(--brand)">${u.role === 'manager' ? 'أكونت مانجر' : 'تيم ليدر'}</span>
       ${r.own != null ? `<span>👤 شغله ${r.own}</span>` : ''}
