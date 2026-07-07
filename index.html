@@ -1979,12 +1979,15 @@ window.openFreshStart=function(){
   if(ME.role!=='admin'){toast('البداية الجديدة للأدمن بس',true);return;}
   const members=PROFILES.filter(p=>p.role==='member'&&p.active!==false);
   if(!members.length){toast('مفيش أعضاء',true);return;}
-  document.getElementById('mTitle').textContent='↺ بداية جديدة — إعادة ضبط التقييم';
+  document.getElementById('mTitle').textContent='↺ بداية جديدة — مسح كامل للتاريخ';
   document.getElementById('mBody').innerHTML=`
-    <div class="lt-empty" style="margin-bottom:14px;font-size:13px;line-height:1.7">
-      اختار العضو اللي عايز تبدأله تقييم جديد من النهارده.<br>
-      <span style="color:var(--danger);font-weight:700">⚠ كل مدرّسيه هيتعدّل تاريخ إسنادهم للنهارده</span><br>
-      <span style="color:var(--muted)">يعني الأيام اللي فاتت مش هتتحسب عليه ولا عليهم.</span>
+    <div class="lt-empty" style="margin-bottom:14px;font-size:13px;line-height:1.8;border-color:var(--danger);background:var(--danger-dim)">
+      <b style="color:var(--danger)">⚠ تحذير — عملية مش رجعة فيها</b><br>
+      كل البيانات دي هتتمسح نهائيًا للعضو ومدرّسيه:<br>
+      <span style="color:var(--muted)">🗑 سجل النشر كله (publish_log)<br>
+      🗑 تقييمات الجودة على الكروت (quality)<br>
+      🗑 التقارير الشهرية (متابعين/مشاهدات)<br>
+      🔄 تاريخ إسناد كل مدرّسيه → النهارده</span>
     </div>
     <div class="field"><label>اختار العضو</label>
       <select id="fs_member">
@@ -1995,21 +1998,34 @@ window.openFreshStart=function(){
     <div id="fs_preview" style="margin-top:12px"></div>`;
   document.getElementById('mFoot').innerHTML=`
     <button class="btn" onclick="closeModal()" style="flex:1">إلغاء</button>
-    <button class="btn primary" id="fs_confirm" style="flex:1;background:var(--review)" onclick="doFreshStart()" disabled>↺ تأكيد البداية الجديدة</button>`;
+    <button class="btn primary" id="fs_confirm" style="flex:1;background:var(--danger)" onclick="doFreshStart()" disabled>🗑 تأكيد المسح والبداية الجديدة</button>`;
   document.getElementById('fs_member').onchange=function(){
     const id=this.value;
     const btn=document.getElementById('fs_confirm');
     const prev=document.getElementById('fs_preview');
     if(!id){btn.disabled=true;prev.innerHTML='';return;}
     const ts=TEACHERS.filter(t=>t.owner_id===id);
+    // حساب أحجام البيانات اللي هتتمسح
+    const teacherIds=ts.map(t=>t.id);
+    const pubCount=PUBLOG.filter(l=>teacherIds.includes(l.teacher_id)||l.member_id===id).length;
+    const qualCount=CARDS.filter(c=>c.assignee_id===id&&c.quality!=null).length;
+    const repCount=REPORTS.filter(r=>teacherIds.includes(r.teacher_id)).length;
     if(!ts.length){
       prev.innerHTML='<div class="lt-empty" style="color:var(--muted)">العضو ده مالوش مدرّسين مسندين.</div>';
       btn.disabled=true;
     } else {
-      prev.innerHTML=`<div class="nav-group-label" style="margin:4px 0 8px;font-size:12px">المدرّسين اللي هيتعدّل تاريخ إسنادهم (${ts.length})</div>`+
+      prev.innerHTML=`
+        <div class="nav-group-label" style="margin:4px 0 10px;font-size:12px;font-weight:800">ملخص ما هيتمسح</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <div class="kpi"><div class="n" style="color:var(--danger)">${pubCount}</div><div class="l">سجل نشر</div></div>
+          <div class="kpi"><div class="n" style="color:var(--danger)">${qualCount}</div><div class="l">تقييم جودة</div></div>
+          <div class="kpi"><div class="n" style="color:var(--danger)">${repCount}</div><div class="l">تقرير شهري</div></div>
+          <div class="kpi"><div class="n" style="color:var(--doing)">${ts.length}</div><div class="l">مدرّس هيتضبط</div></div>
+        </div>
+        <div class="nav-group-label" style="margin:4px 0 8px;font-size:12px">المدرّسين (${ts.length})</div>`+
         ts.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
           ${avaT(t.id,28)}<span style="font-weight:700;font-size:13px">${t.name}</span>
-          <span style="margin-inline-start:auto;font-size:11px;color:var(--muted)">كان: ${t.assigned_at||'—'} → <b style="color:var(--ready)">${ymd(new Date())}</b></span>
+          <span style="margin-inline-start:auto;font-size:11px;color:var(--muted)">${t.assigned_at||'—'} → <b style="color:var(--ready)">${ymd(new Date())}</b></span>
         </div>`).join('');
       btn.disabled=false;
     }
@@ -2023,21 +2039,46 @@ window.doFreshStart=async function(){
   const memberName=PROFILES.find(p=>p.id===memberId)?.name||'العضو';
   const ts=TEACHERS.filter(t=>t.owner_id===memberId);
   if(!ts.length){toast('مفيش مدرّسين',true);return;}
+  const teacherIds=ts.map(t=>t.id);
   const today=ymd(new Date());
   const btn=document.getElementById('fs_confirm');
-  btn.disabled=true; btn.textContent='بيتحدّث…';
+  btn.disabled=true; btn.textContent='بيمسح…';
   let errors=0;
-  for(const t of ts){
-    const {error}=await sb.from('teachers').update({assigned_at:today}).eq('id',t.id);
-    if(error){errors++;toast('خطأ في '+t.name+': '+error.message,true);}
+
+  // 1. مسح سجل النشر كله للعضو ومدرّسيه
+  const {error:e1}=await sb.from('publish_log')
+    .delete()
+    .or(`member_id.eq.${memberId},teacher_id.in.(${teacherIds.join(',')})`);
+  if(e1){errors++;console.error('publish_log:',e1.message);}
+
+  // 2. مسح تقييمات الجودة من الكروت (نحطها null مش بنمسح الكارت)
+  const {error:e2}=await sb.from('cards')
+    .update({quality:null})
+    .eq('assignee_id',memberId)
+    .not('quality','is',null);
+  if(e2){errors++;console.error('cards quality:',e2.message);}
+
+  // 3. مسح التقارير الشهرية لمدرّسيه
+  if(teacherIds.length){
+    const {error:e3}=await sb.from('monthly_reports')
+      .delete()
+      .in('teacher_id',teacherIds);
+    if(e3){errors++;console.error('monthly_reports:',e3.message);}
   }
+
+  // 4. تحديث assigned_at لكل مدرّسيه للنهارده
+  for(const t of ts){
+    const {error:e4}=await sb.from('teachers').update({assigned_at:today}).eq('id',t.id);
+    if(e4){errors++;console.error('teacher assigned_at:',e4.message);}
+  }
+
   await reload();
   closeModal();
   render();
   if(!errors){
-    toast(`✅ تم! ${ts.length} مدرّس اتعدّلوا لـ ${memberName} — التقييم يبدأ من النهارده`);
+    toast(`✅ تم بنجاح! تاريخ ${memberName} اتمسح كله — التقييم يبدأ نضيف من النهارده 🎯`);
   } else {
-    toast(`تم جزئيًا (${errors} خطأ — شوف التفاصيل فوق)`,true);
+    toast(`اتعمل جزء منه (${errors} خطأ — شوف الكونسول)`,true);
   }
 };
 window.setRole=async function(id,role){
