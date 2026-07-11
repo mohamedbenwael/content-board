@@ -867,32 +867,81 @@ function memberGrowthScore(memberId, ym){
 }
 // balance الأسابيع المكتملة في الشهر الحالي — 0..1 أو null
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
-function memberBalanceScore(memberId, ym){
+function memberBalanceScore(memberId, ym){function memberBalanceScore(memberId, ym){
   ym = ym || ymNow();
   const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   if(!ts.length) return null;
+  
   const mStart=monthStartOf(ym);
   const [yy,mm]=ym.split('-').map(Number);
-  const monthEnd=new Date(yy,mm,1); // أول الشهر اللي بعده (حصري)
-  const cutoff = (ym===ymNow()) ? new Date() : monthEnd; // الحالي: لحد النهاردة · الفايت: الشهر كله
-  let evaluable=0, ok=0;
+  const monthEnd=new Date(yy,mm,1);
+  const cutoff = (ym===ymNow()) ? new Date(new Date().setHours(23,59,59,999)) : monthEnd;
+  
+  let weekScores=[];
   let d=new Date(mStart);
-  while(d.getDay()!==6) d.setDate(d.getDate()+1); // أول سبت
+  while(d.getDay()!==6) d.setDate(d.getDate()+1); 
+  
+  const calcWeek = (active, fromYmd, toYmd, isCurrentIncompleteWeek) => {
+    const teacherScores=active.map(t=>{
+      const counts=teacherCatCounts(t.id, fromYmd, toYmd);
+      
+      const assigned = t.assigned_at ? new Date(t.assigned_at+'T00:00:00') : new Date(0);
+      const wStart = new Date(fromYmd+'T00:00:00');
+      const daysActive = Math.round((new Date(toYmd+'T23:59:59') - Math.max(assigned, wStart)) / 864e5);
+      
+      const ignoreMin = daysActive < 4 || isCurrentIncompleteWeek;
+
+      const minRules=COMPLIANCE_RULES.filter(r=>r.type==='min');
+      const minScore=minRules.length
+        ? minRules.reduce((s,r)=>{
+            if(ignoreMin && (counts[r.cat]||0) < r.n) return s + 1; 
+            return s + Math.min(1,(counts[r.cat]||0)/r.n);
+          },0)/minRules.length
+        : 1;
+
+      const maxPenalty=COMPLIANCE_RULES.filter(r=>r.type==='max')
+        .reduce((pen,r)=>{ 
+          const got=counts[r.cat]||0; 
+          return got>r.n ? pen+0.15*(got-r.n) : pen; 
+        },0);
+
+      return Math.max(0, minScore - maxPenalty);
+    });
+    return teacherScores.reduce((s,v)=>s+v,0)/teacherScores.length;
+  };
+
   while(d<monthEnd){
     const fri=new Date(d); fri.setDate(d.getDate()+6);
-    if(fri<cutoff){
-      const friYmd=ymd(fri);
-      // المدرّسين اللي كانوا مسندين فعلاً في الأسبوع ده (مش قبل ما يتسندوا)
+    const friYmd=ymd(fri);
+    const weekFromYmd=ymd(d);
+    
+    if(fri<=cutoff){
       const active=ts.filter(t=>!t.assigned_at || t.assigned_at.slice(0,10)<=friYmd);
       if(active.length){
-        evaluable++;
-        if(active.every(t=>teacherWeekCompliance(t.id,d).issues.length===0)) ok++;
+        weekScores.push(calcWeek(active, weekFromYmd, friYmd, false));
       }
     }
     d.setDate(d.getDate()+7);
   }
-  if(!evaluable) return null; // مفيش أسابيع فيها مدرّس مسند → «لسه»
-  return ok/evaluable;
+
+  if(ym===ymNow()){
+    const today=new Date(); today.setHours(0,0,0,0);
+    let curWeekStart=new Date(today);
+    while(curWeekStart.getDay()!==6) curWeekStart.setDate(curWeekStart.getDate()-1);
+    
+    const curFri=new Date(curWeekStart); curFri.setDate(curWeekStart.getDate()+6);
+    if(curFri>cutoff && curWeekStart>=new Date(mStart)){
+      const curFromYmd=ymd(curWeekStart);
+      const curToYmd=ymd(today);
+      const active=ts.filter(t=>!t.assigned_at||t.assigned_at.slice(0,10)<=curToYmd);
+      if(active.length){
+        weekScores.push(calcWeek(active, curFromYmd, curToYmd, true));
+      }
+    }
+  }
+  
+  if(!weekScores.length) return null;
+  return weekScores.reduce((s,v)=>s+v,0)/weekScores.length;
 }
 
 // إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
