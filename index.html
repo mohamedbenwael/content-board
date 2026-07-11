@@ -1705,7 +1705,8 @@ function myScoreCard(ym){
     ${breakdown}</div>`;
 }
 function rankView(){
-  // if (RANK_MAINTENANCE) {
+  // فحص وضع الصيانة
+  if (RANK_MAINTENANCE) {
     return `<div class="page-head">
       <div>
         <div class="page-title">التقييم والترتيب</div>
@@ -1718,14 +1719,14 @@ function rankView(){
       <div style="color: var(--muted); font-size: 14px; line-height: 1.6;">بنظبط حسابات المعادلات عشان التقييم يكون أعدل وأدق للكل.<br>راجع الصفحة دي كمان شوية! 🚀</div>
     </div>`;
   }
-  أول ١٠ أيام: يفتح على الشهر اللي فات (التقييم النهائي) · بعد كده: الشهر الحالي (المتابعة الجارية)
+
   if(!rankMonth) rankMonth = (new Date().getDate() <= 10) ? shiftYm(ymNow(),-1) : ymNow();
   const ym=rankMonth;
   const isMember=ME.role==='member';
   const monthNav=`<div class="week-nav" style="margin-bottom:16px">
       <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
       <span class="label" style="font-weight:800;font-size:15px">${ymLabel(ym)}</span>
-      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',1);render()" ${ym>=ymNow()?'disabled style=\"width:auto;padding:0 14px;font-size:13px;opacity:.4\"':'style=\"width:auto;padding:0 14px;font-size:13px\"'}>الشهر التالي ›</button>
+      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',1);render()" ${ym>=ymNow()?'disabled style="width:auto;padding:0 14px;font-size:13px;opacity:.4"':'style="width:auto;padding:0 14px;font-size:13px"'}">الشهر التالي ›</button>
       ${ym!==ymNow()?`<button onclick="rankMonth='${ymNow()}';render()" style="width:auto;padding:0 14px;font-size:13px">الشهر ده</button>`:''}
     </div>`;
   const liveNote = ym===ymNow() ? `<div class="lt-empty" style="margin-bottom:14px;font-size:12px">⏳ الشهر ده لسه شغّال — الأرقام بتتغيّر لحد آخر الشهر. للتقييم النهائي بُص على الشهر اللي فات.</div>` : '';
