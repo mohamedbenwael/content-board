@@ -1719,6 +1719,20 @@ function rankView(){
       <div style="color: var(--muted); font-size: 14px; line-height: 1.6;">بنظبط حسابات المعادلات عشان التقييم يكون أعدل وأدق للكل.<br>راجع الصفحة دي كمان شوية! 🚀</div>
     </div>`;
   }
+  // فحص وضع الصيانة
+  if (RANK_MAINTENANCE) {
+    return `<div class="page-head">
+      <div>
+        <div class="page-title">التقييم والترتيب</div>
+        <div class="page-sub">انتظام النزول ٣٥٪ + التوازن ٣٠٪ + جودة الشغل ٢٠٪ + نمو الصفحة ١٥٪</div>
+      </div>
+    </div>
+    <div class="empty" style="margin-top: 40px;">
+      <div class="big">⚙️</div>
+      <div style="font-size: 18px; font-weight: 800; margin-bottom: 8px; color: var(--brand);">بيحصل تحديث دلوقتي في نظام التقييم</div>
+      <div style="color: var(--muted); font-size: 14px; line-height: 1.6;">بنظبط حسابات المعادلات عشان التقييم يكون أعدل وأدق للكل.<br>راجع الصفحة دي كمان شوية! 🚀</div>
+    </div>`;
+  }
 
   if(!rankMonth) rankMonth = (new Date().getDate() <= 10) ? shiftYm(ymNow(),-1) : ymNow();
   const ym=rankMonth;
