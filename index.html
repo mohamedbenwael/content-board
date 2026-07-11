@@ -929,29 +929,32 @@ function memberDaysFactor(memberId, ym){
   return memberDays / totalMonthDays;
 }
 
-function memberScore(memberId, ym){
+function memberScore(memberId, ym){function memberScore(memberId, ym){
   ym = ym || ymNow();
   const isCur = (ym===ymNow());
   const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+expectedDays(t, ym).length,0);
+  
   const forgiven=memberForgiven(memberId, ym);
   const expectedTotal=Math.max(0,expectedRaw-forgiven);
   const posts=memberPosts(memberId, ym);
   const missed=memberMissed(memberId, ym);
+
+  if(expectedRaw < 7) {
+    return {score: null, posts, missed, postingPct: null, balancePct: null, qualityPct: null, growthPct: null, daysFactor: 1};
+  }
+
   const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; 
   
-  // التوازن ملغي من الشهور اللي فاتت، وبيتحسب من الشهر الحالي بس
-  const isWeekEnded = new Date().getDay() >= 5;
   let bScore = null;
   if (isCur) {
-    bScore = (!isWeekEnded) ? null : memberBalanceScore(memberId, ym);
+    bScore = memberBalanceScore(memberId, ym);
   }
   
   const qScore=memberQuality(memberId, ym);        
   const gScore=memberGrowthScore(memberId, ym);    
   
   if(pScore===null && bScore===null && qScore===null && gScore===null && posts<1)
-    return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null, daysFactor:1};
-  
+    return {score:null, posts, missed, postingPct:null, balancePct:null, qualityPct:null, growthPct:null, daysFactor:1};  
   const parts=[];
   if(pScore!==null) parts.push([pScore,.35]);
   if(bScore!==null) parts.push([bScore,.30]);
