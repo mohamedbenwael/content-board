@@ -1772,20 +1772,6 @@ function rankView(){
       <div style="color: var(--muted); font-size: 14px; line-height: 1.6;">بنظبط حسابات المعادلات عشان التقييم يكون أعدل وأدق للكل.<br>راجع الصفحة دي كمان شوية! 🚀</div>
     </div>`;
   }
-  // فحص وضع الصيانة
-  if (RANK_MAINTENANCE) {
-    return `<div class="page-head">
-      <div>
-        <div class="page-title">التقييم والترتيب</div>
-        <div class="page-sub">انتظام النزول ٣٥٪ + التوازن ٣٠٪ + جودة الشغل ٢٠٪ + نمو الصفحة ١٥٪</div>
-      </div>
-    </div>
-    <div class="empty" style="margin-top: 40px;">
-      <div class="big">⚙️</div>
-      <div style="font-size: 18px; font-weight: 800; margin-bottom: 8px; color: var(--brand);">بيحصل تحديث دلوقتي في نظام التقييم</div>
-      <div style="color: var(--muted); font-size: 14px; line-height: 1.6;">بنظبط حسابات المعادلات عشان التقييم يكون أعدل وأدق للكل.<br>راجع الصفحة دي كمان شوية! 🚀</div>
-    </div>`;
-  }
 
   if(!rankMonth) rankMonth = (new Date().getDate() <= 10) ? shiftYm(ymNow(),-1) : ymNow();
   const ym=rankMonth;
@@ -1793,7 +1779,7 @@ function rankView(){
   const monthNav=`<div class="week-nav" style="margin-bottom:16px">
       <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',-1);render()" style="width:auto;padding:0 14px;font-size:13px">‹ الشهر السابق</button>
       <span class="label" style="font-weight:800;font-size:15px">${ymLabel(ym)}</span>
-      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',1);render()" ${ym>=ymNow()?'disabled style="width:auto;padding:0 14px;font-size:13px;opacity:.4"':'style="width:auto;padding:0 14px;font-size:13px"'}">الشهر التالي ›</button>
+      <button onclick="rankMonth=shiftYm(rankMonth||'${ymNow()}',1);render()" ${ym>=ymNow()?'disabled style="width:auto;padding:0 14px;font-size:13px;opacity:.4"':'style="width:auto;padding:0 14px;font-size:13px"'}>الشهر التالي ›</button>
       ${ym!==ymNow()?`<button onclick="rankMonth='${ymNow()}';render()" style="width:auto;padding:0 14px;font-size:13px">الشهر ده</button>`:''}
     </div>`;
   const liveNote = ym===ymNow() ? `<div class="lt-empty" style="margin-bottom:14px;font-size:12px">⏳ الشهر ده لسه شغّال — الأرقام بتتغيّر لحد آخر الشهر. للتقييم النهائي بُص على الشهر اللي فات.</div>` : '';
@@ -3467,6 +3453,26 @@ window.testLatestUpdate = function() {
     toast('تم إعادة ضبط الجولة بنجاح.. بتفتح دلوقتي! 🚀');
 };
   window.toggleRankMaintenance = async function(btn) {
+  if (ME.role !== 'admin') return toast('الخاصية دي للأدمن بس', true);
+  const newVal = !RANK_MAINTENANCE;
+  if(btn) { btn.disabled = true; btn.textContent = 'ثانية...'; }
+  
+  const {error} = await sb.from('app_settings').upsert(
+    { key: 'rank_maintenance', value: newVal, updated_at: new Date().toISOString() },
+    { onConflict: 'key' }
+  );
+  
+  if (error) {
+    if(btn) btn.disabled = false;
+    return toast(error.message, true);
+  }
+  
+  RANK_MAINTENANCE = newVal;
+  await reload(); 
+  render(); 
+  toast(newVal ? 'تم إخفاء التقييمات عن الفريق 🚧' : 'التقييمات رجعت تظهر للكل ✓');
+};
+window.toggleRankMaintenance = async function(btn) {
   if (ME.role !== 'admin') return toast('الخاصية دي للأدمن بس', true);
   const newVal = !RANK_MAINTENANCE;
   if(btn) { btn.disabled = true; btn.textContent = 'ثانية...'; }
