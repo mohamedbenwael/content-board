@@ -195,7 +195,7 @@
   .cal .d.rest{background:var(--raised2);color:var(--faint)}
   .cal .d.future{background:transparent;color:var(--faint)}
 
-  .plan-cal{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .plan-cal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
   .pc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-size:14px}
   .pc-leg{font-size:11.5px;color:var(--muted);font-weight:600}
   .pcal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -389,6 +389,8 @@
    بورد المحتوى — موصّل بـ Supabase
    ============================================================ */
 const SUPABASE_URL  = 'https://yplxjertpilrqnyezdaq.supabase.co';
+// ⚠️ المفتاح ده غلط — لازم يكون الـ anon key الحقيقي من Supabase Dashboard
+// Project Settings → API → "anon public" key (بتبدأ بـ eyJ...)
 const SUPABASE_KEY  = 'sb_publishable_6wSDbZx7nkjxS59xWyg09g_EuzfaUCx';
 
 let sb=null;
@@ -448,11 +450,16 @@ function weekEnd(d){ const s=weekStart(d); const e=new Date(s); e.setDate(s.getD
 // عدّ بوستات مدرّس حسب النوع في فترة (من publish_log مربوط بالكارت لمعرفة الـcategory)
 function teacherCatCounts(teacherId, fromYmd, toYmd){
   const counts={}; CATS.forEach(c=>counts[c]=0); counts['غير مصنّف']=0;
-  // بس التسجيلات المربوطة بكارت (ليها نوع) — التسجيل اليدوي من التقويم (card_id فاضي) بيتجاهل
-  PUBLOG.filter(l=>l.teacher_id===teacherId && l.card_id && l.pub_date>=fromYmd && l.pub_date<=toYmd).forEach(l=>{
-    const card=CARDS.find(x=>x.id===l.card_id);
-    const cat=card&&card.category?card.category:'غير مصنّف';
-    if(counts[cat]===undefined)counts[cat]=0; counts[cat]++;
+  // نشمل كل التسجيلات — سواء مرتبطة بكارت أو يدوية
+  PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=fromYmd && l.pub_date<=toYmd).forEach(l=>{
+    let cat = 'غير مصنّف';
+    if(l.card_id){
+      const card=CARDS.find(x=>x.id===l.card_id);
+      cat = card&&card.category ? card.category : 'غير مصنّف';
+    }
+    // البوستات اليدوية (بدون card_id) بتتحسب كـ"غير مصنّف" — مش بتتجاهل
+    if(counts[cat]===undefined) counts[cat]=0;
+    counts[cat]++;
   });
   return counts;
 }
@@ -867,7 +874,7 @@ function memberGrowthScore(memberId, ym){
 }
 // balance الأسابيع المكتملة في الشهر الحالي — 0..1 أو null
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
-function memberBalanceScore(memberId, ym){function memberBalanceScore(memberId, ym){
+function memberBalanceScore(memberId, ym){
   ym = ym || ymNow();
   const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   if(!ts.length) return null;
@@ -924,29 +931,19 @@ function memberBalanceScore(memberId, ym){function memberBalanceScore(memberId, 
     d.setDate(d.getDate()+7);
   }
 
-  if(ym===ymNow()){
-    const today=new Date(); today.setHours(0,0,0,0);
-    let curWeekStart=new Date(today);
-    while(curWeekStart.getDay()!==6) curWeekStart.setDate(curWeekStart.getDate()-1);
-    
-    const curFri=new Date(curWeekStart); curFri.setDate(curWeekStart.getDate()+6);
-    if(curFri>cutoff && curWeekStart>=new Date(mStart)){
-      const curFromYmd=ymd(curWeekStart);
-      const curToYmd=ymd(today);
-      const active=ts.filter(t=>!t.assigned_at||t.assigned_at.slice(0,10)<=curToYmd);
-      if(active.length){
-        weekScores.push(calcWeek(active, curFromYmd, curToYmd, true));
-      }
-    }
-  }
+  // ملحوظة (فيكس): كنا بنحسب الأسبوع الحالي (اللي لسه ماخلصش) كنقطة كاملة في المتوسط،
+  // ولأن قواعد الحد الأدنى (ريلز/ديزاين) بتتسامح مع الأسبوع الناقص (ignoreMin) وبتدّي شبه علامة كاملة
+  // تلقائيًا، ده كان بيدّي كل الناس نفس الدرجة تقريبًا (بيطمّس الفرق الحقيقي بينهم) ومش متسق مع
+  // باقي الصفحات في السايت اللي بتقول إن قواعد الحد الأدنى بتتحسب بعد ما الأسبوع يخلص بس
+  // (زي صفحة «التزام المحتوى الأسبوعي»). فدلوقتي التوازن بيتحسب من الأسابيع المكتملة فعلاً بس.
   
   if(!weekScores.length) return null;
   return weekScores.reduce((s,v)=>s+v,0)/weekScores.length;
 }
 
 // إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
-function memberManageScore(memberId){
-  const ym=shiftYm(ymNow(),-1); // الشهر اللي فات
+function memberManageScore(memberId, ym){
+  ym = ym ? shiftYm(ym,-1) : shiftYm(ymNow(),-1); // الشهر اللي قبل الشهر المطلوب
   const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
   const vals=[];
   ts.forEach(t=>{const r=getTReview(t.id,ym); if(r){[r.reply,r.satis,r.comm,r.exec].forEach(v=>{if(v)vals.push(v);});}});
@@ -979,7 +976,7 @@ function memberDaysFactor(memberId, ym){
   return memberDays / totalMonthDays;
 }
 
-function memberScore(memberId, ym){function memberScore(memberId, ym){
+function memberScore(memberId, ym){
   ym = ym || ymNow();
   const isCur = (ym===ymNow());
   const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+expectedDays(t, ym).length,0);
@@ -989,16 +986,13 @@ function memberScore(memberId, ym){function memberScore(memberId, ym){
   const posts=memberPosts(memberId, ym);
   const missed=memberMissed(memberId, ym);
 
-  if(expectedRaw < 7) {
+  if(expectedRaw < 3) {
     return {score: null, posts, missed, postingPct: null, balancePct: null, qualityPct: null, growthPct: null, daysFactor: 1};
   }
 
   const pScore=expectedTotal? Math.max(0,Math.min(1,(expectedTotal-missed)/expectedTotal)) : null; 
   
-  let bScore = null;
-  if (isCur) {
-    bScore = memberBalanceScore(memberId, ym);
-  }
+  let bScore = memberBalanceScore(memberId, ym);
   
   const qScore=memberQuality(memberId, ym);        
   const gScore=memberGrowthScore(memberId, ym);    
@@ -1451,7 +1445,7 @@ function detailView(){
     const head=`<div class="page-head"><div><div class="page-title">${p.name}</div>
       <div class="page-sub">عضو · تيم ${U(p.lead_id).name}</div></div></div>`;
     const kpis=`<div class="stats" style="grid-template-columns:repeat(4,1fr)">
-      <div class="stat"><div class="k">التقييم</div><div class="v" style="color:${sc.score==null?'var(--faint)':scoreColor(sc.score)}">${sc.score==null?'—':sc.score}</div></div>
+      <div class="stat"><div class="k">التقييم</div><div class="v" style="color:${sc.score==null?'var(--faint)':scoreColor(sc.score, sc.daysFactor)}">${sc.score==null?'—':sc.score}</div></div>
       <div class="stat"><div class="k">بوستات الشهر</div><div class="v">${posts}</div></div>
       <div class="stat"><div class="k">أيام فايتة</div><div class="v" style="color:${missed?'var(--danger)':'inherit'}">${missed}</div></div>
       <div class="stat"><div class="k">الالتزام</div><div class="v">${sc.onTimeRate==null?'—':sc.onTimeRate+'٪'}</div></div></div>`;
@@ -1743,13 +1737,13 @@ const ROLE_GROUPS=[['member','🧑‍💻 الأعضاء'],['lead','🎖 الت�
 function myScoreCard(ym){
   if(ME.role!=='member') return '';
   const rows=rankGroup('member', ym); const me=rows.find(r=>r.id===ME.id); if(!me)return'';
-  const sc=me.score, col=sc===null?'var(--faint)':scoreColor(sc);
+  const sc=me.score, col=sc===null?'var(--faint)':scoreColor(sc, me.daysFactor);
   const breakdown=`<div class="sub" style="justify-content:center;margin-top:8px">
       ${me.postingPct!=null?`<span>🗓 انتظام ${me.postingPct}٪</span>`:''}
       ${me.balancePct!=null?`<span>⚖️ توازن ${me.balancePct}٪</span>`:'<span style="color:var(--faint)">⚖️ توازن لسه</span>'}
       ${me.qualityPct!=null?`<span>💡 جودة ${me.qualityPct}٪</span>`:'<span style="color:var(--faint)">💡 لسه ماتقيّمتش</span>'}
       ${me.growthPct!=null?`<span>📈 نمو ${me.growthPct}٪</span>`:'<span style="color:var(--faint)">📈 نمو لسه</span>'}</div>`;
-  const tier=scoreTier(sc);
+  const tier=scoreTier(sc, me.daysFactor);
   return `<div class="lt-empty" style="text-align:center;margin-bottom:18px;padding:18px">
     <div style="font-size:13px;color:var(--muted)">تقييمك — ${ymLabel(ym||ymNow())}</div>
     <div style="display:inline-flex;align-items:center;gap:6px;background:${tier.color}22;color:${tier.color};font-weight:800;font-size:14px;padding:5px 14px;border-radius:20px;margin:8px 0 2px">${tier.ico} ${tier.name}</div>
@@ -1797,13 +1791,14 @@ function rankView(){
 }
 function rankSubLine(r) {
   const u = U(r.id);
+  const isNewStarter = r.daysFactor != null && r.daysFactor < 50;
   return `<div class="sub">
     ${u.role === 'member' ? `
       ${r.postingPct != null ? `<span>🗓 انتظام ${r.postingPct}٪</span>` : ''}
       ${r.balancePct != null ? `<span>⚖️ توازن ${r.balancePct}٪</span>` : '<span style="color:var(--faint)">⚖️ توازن لسه</span>'}
       ${r.qualityPct != null ? `<span>💡 جودة ${r.qualityPct}٪</span>` : '<span style="color:var(--faint)">💡 لسه ماتقيّمش</span>'}
       ${r.growthPct != null ? `<span>📈 نمو ${r.growthPct}٪</span>` : '<span style="color:var(--faint)">📈 نمو لسه</span>'}
-      ${(r.daysFactor != null && r.daysFactor < 100) ? `<span style="color:var(--muted);font-size:11px" title="بدأ من نص الشهر — النقطة اتضربت في نسبة أيامه">⏱ ${r.daysFactor}٪ من الشهر</span>` : ''}
+      ${isNewStarter ? `<span style="color:#4A6FB5;font-size:11px" title="بدأ من نص الشهر — التقييم هيكتمل بآخر الشهر">🌱 بداية (${r.daysFactor}٪ من الشهر)</span>` : ''}
     ` : `
       <span style="color:var(--brand)">${u.role === 'manager' ? 'أكونت مانجر' : 'تيم ليدر'}</span>
       ${r.own != null ? `<span>👤 شغله ${r.own}</span>` : ''}
@@ -1813,13 +1808,13 @@ function rankSubLine(r) {
 
 function rankRowHTML(r,pos,plain){
   const u=U(r.id), isNew=r.score===null, medal=(!plain&&pos===1)?'g1':(!plain&&pos===2)?'g2':(!plain&&pos===3)?'g3':'', isMe=r.id===ME.id;
-  const tier=scoreTier(r.score);
+  const tier=scoreTier(r.score, r.daysFactor);
   const posLabel=isNew||pos===null?'⏳':pos;
   return `<div class="rank-row ${!plain&&pos<=3&&!isNew?'top':''}" style="${isMe?'outline:2px solid var(--brand);outline-offset:-2px':''}${isNew?'opacity:0.65':''}">
     <div class="rank-pos ${isNew?'':medal}" style="${isNew?'font-size:16px':''}">  ${posLabel}</div>
     ${avaP(r.id,38)}
     <div class="rank-main"><div class="nm">${u.name}${isMe?' (إنت)':''}</div>${rankSubLine(r)}</div>
-    <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'⏳ لسه':tier.ico+' '+tier.name}</div></div>
+    <div class="rank-score"><div class="n" style="color:${isNew?'var(--faint)':scoreColor(r.score, r.daysFactor)}">${isNew?'—':r.score}</div><div class="l" style="color:${tier.color};font-weight:700">${isNew?'⏳ لسه':tier.ico+' '+tier.name}</div></div>
   </div>`;
 }
 function membersRank(ym){
@@ -1862,7 +1857,7 @@ function teamsRank(ym){
   });
   rows.sort((a,b)=>(b.score??-1)-(a.score??-1));
   return rows.map((r,i)=>{
-    const pos=i+1, isNew=r.score===null, medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'', tier=scoreTier(r.score), mine=U(r.id).lead_id===ME.id||r.id===ME.id;
+    const pos=i+1, isNew=r.score===null, medal=pos===1?'g1':pos===2?'g2':pos===3?'g3':'', tier=scoreTier(r.score, null), mine=U(r.id).lead_id===ME.id||r.id===ME.id;
     return `<div class="rank-row ${pos<=3&&!isNew?'top':''}">
       <div class="rank-pos ${isNew?'':medal}">${isNew?'—':pos}</div>
       ${avaP(r.id,38)}
@@ -1872,9 +1867,14 @@ function teamsRank(ym){
     </div>`;
   }).join('');
 }
-function scoreColor(s){return s>=80?'var(--ready)':s>=55?'var(--doing)':'var(--danger)';}
-function scoreTier(s){
+function scoreColor(s, daysFactor){
+  if(daysFactor!=null && daysFactor < 50) return '#4A6FB5'; // مبتدئ = أزرق مش أحمر
+  return s>=80?'var(--ready)':s>=55?'var(--doing)':'var(--danger)';
+}
+function scoreTier(s, daysFactor){
   if(s===null||s===undefined) return {name:'لسه بيتقيّم', color:'var(--faint)', ico:'⏳'};
+  // لو بدأ من نص الشهر (daysFactor < 50%) نوضّح إنه في البداية
+  if(daysFactor!=null && daysFactor < 50) return {name:'في البداية', color:'#4A6FB5', ico:'🌱'};
   if(s>=85) return {name:'ممتاز', color:'var(--ready)', ico:'⭐'};
   if(s>=70) return {name:'كويس جدًا', color:'#3B82C4', ico:'💪'};
   if(s>=55) return {name:'كويس', color:'var(--doing)', ico:'👍'};
@@ -3453,26 +3453,6 @@ window.testLatestUpdate = function() {
     toast('تم إعادة ضبط الجولة بنجاح.. بتفتح دلوقتي! 🚀');
 };
   window.toggleRankMaintenance = async function(btn) {
-  if (ME.role !== 'admin') return toast('الخاصية دي للأدمن بس', true);
-  const newVal = !RANK_MAINTENANCE;
-  if(btn) { btn.disabled = true; btn.textContent = 'ثانية...'; }
-  
-  const {error} = await sb.from('app_settings').upsert(
-    { key: 'rank_maintenance', value: newVal, updated_at: new Date().toISOString() },
-    { onConflict: 'key' }
-  );
-  
-  if (error) {
-    if(btn) btn.disabled = false;
-    return toast(error.message, true);
-  }
-  
-  RANK_MAINTENANCE = newVal;
-  await reload(); 
-  render(); 
-  toast(newVal ? 'تم إخفاء التقييمات عن الفريق 🚧' : 'التقييمات رجعت تظهر للكل ✓');
-};
-window.toggleRankMaintenance = async function(btn) {
   if (ME.role !== 'admin') return toast('الخاصية دي للأدمن بس', true);
   const newVal = !RANK_MAINTENANCE;
   if(btn) { btn.disabled = true; btn.textContent = 'ثانية...'; }
