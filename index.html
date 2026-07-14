@@ -1666,7 +1666,7 @@ function statStrip(cs){
     ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
 }
 function olderBtn(){ return loadedAll?'':`<div style="text-align:center;margin-top:20px"><button class="btn ghost" style="height:38px;padding:0 18px" onclick="loadOlderData(this)">⤓ حمّل الشغل الأقدم (قبل ٣ شهور)</button></div>`; }
-function boardView(){function boardView(){
+function boardView(){
   const all=visibleCards();
   const isTask=boardKind==='task';
   const cs=all.filter(c=>(c.kind||'post')===boardKind);
@@ -1692,7 +1692,6 @@ function boardView(){function boardView(){
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
   const scopeSub = ME.role!=='member' ? (boardScope==='team'?' · شغل تيمك':' · شغلك إنت') : '';
   
-  // --- دول اللي طاروا ورجعناهم (الاقتراحات وخطة الأسبوع) ---
   const occ = isTask ? '' : occasionBanner();
   const suggestRows = isTask ? '' : (scopeTeacher ? teacherSuggestRow(T(scopeTeacher)) : myTeachers.map(teacherSuggestRow).join(''));
   const suggest = suggestRows ? `<div class="suggest-list">
@@ -1701,12 +1700,103 @@ function boardView(){function boardView(){
   </div>` : (occ ? `<div class="suggest-list">${occ}</div>` : '');
   const weekPlan = (!isTask && myTeachers.length) ? weekPlanSection(myTeachers) : '';
   
-  // --- الإضافة الجديدة: التقويم القديم مدموج مع الخطة الديناميكية ---
   const planCal = (scopeTeacher && !isTask) ? planCalendar(T(scopeTeacher)) + dynamicTeacherPlanHTML(T(scopeTeacher)) : '';
   
   return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}${scopeSub}</div></div></div>
     ${tabs}${scopeTabs}${planBanner}${suggest}${weekPlan}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>${olderBtn()}`;
+}
+
+function dynamicTeacherPlanHTML(t) {
+  if(!t) return '';
+  const ws = weekStart(new Date());
+  const we = weekEnd(new Date());
+  const today = new Date(); today.setHours(0,0,0,0);
+  const logs = PUBLOG.filter(l => l.teacher_id === t.id && l.pub_date >= ymd(ws) && l.pub_date <= ymd(we));
+  
+  let schedule = [];
+  let reelsDone = 0, designsDone = 0, comicsDone = 0;
+  let daysOffTaken = 0;
+  
+  let d = new Date(ws);
+  while (d < today) {
+    const ds = ymd(d);
+    const dayLogs = logs.filter(l => l.pub_date === ds);
+    if (dayLogs.length === 0) {
+       daysOffTaken++;
+       schedule.push({ date: ds, type: 'past_off', label: 'إجازة أخدتها ⚪' });
+    } else {
+       let cats = dayLogs.map(l => {
+         const c = CARDS.find(x => x.id === l.card_id);
+         return c && c.category ? c.category : 'غير مصنّف';
+       });
+       cats.forEach(c => {
+         if (c === 'ريلز') reelsDone++;
+         if (c === 'ديزاين') designsDone++;
+         if (c === 'كوميك') comicsDone++;
+       });
+       schedule.push({ date: ds, type: 'past_work', label: `نزل (${cats.join('، ')}) ✅` });
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  
+  let reelsNeeded = Math.max(0, 2 - reelsDone);
+  let designsNeeded = Math.max(0, 2 - designsDone);
+  let offDaysNeeded = Math.max(0, 1 - daysOffTaken); 
+  
+  let daysLeft = [];
+  while (d <= we) { daysLeft.push(ymd(d)); d.setDate(d.getDate() + 1); }
+  
+  daysLeft.forEach((ds, idx) => {
+     const isToday = ds === ymd(today);
+     const daysRemaining = daysLeft.length - idx;
+     
+     if (offDaysNeeded > 0 && daysRemaining === (reelsNeeded + designsNeeded + offDaysNeeded) && reelsNeeded === 0 && designsNeeded === 0) {
+         schedule.push({ date: ds, type: 'future_off', label: 'إجازة ⚪', isToday, hint: 'يوم الراحة' });
+         offDaysNeeded--;
+     } 
+     else if (reelsNeeded > 0) {
+         schedule.push({ date: ds, type: 'future_reel', label: 'ريلز 🎬', isToday, hint: 'مطلوب للتارجت' });
+         reelsNeeded--;
+     }
+     else if (designsNeeded > 0) {
+         schedule.push({ date: ds, type: 'future_design', label: 'ديزاين 🎨', isToday, hint: 'مطلوب للتارجت' });
+         designsNeeded--;
+     }
+     else if (offDaysNeeded > 0) {
+         schedule.push({ date: ds, type: 'future_off', label: 'إجازة ⚪', isToday, hint: 'يوم الراحة' });
+         offDaysNeeded--;
+     }
+     else {
+         const canComic = comicsDone < 2;
+         schedule.push({ date: ds, type: 'future_free', label: canComic ? 'حر (ممكن كوميك 😂)' : 'حر (بلاش كوميك)', isToday, hint: 'أي نوع محتوى' });
+         if(canComic) comicsDone++; 
+     }
+  });
+  
+  const daysNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const html = schedule.map(s => {
+     const dn = daysNames[new Date(s.date).getDay()];
+     const isPast = s.type.startsWith('past');
+     const bg = s.isToday ? 'var(--brand-dim)' : (isPast ? 'transparent' : 'var(--panel)');
+     const border = s.isToday ? '2px solid var(--brand)' : (isPast ? '1px dashed var(--line2)' : '1px solid var(--line)');
+     const op = isPast ? '0.6' : '1';
+     return `<div style="padding:10px; border-radius:10px; background:${bg}; border:${border}; opacity:${op}; display:flex; flex-direction:column; gap:4px">
+       <div style="font-size:11.5px; font-weight:800; color:var(--muted)">${dn} ${s.isToday ? '<span style="color:var(--brand)">(النهاردة)</span>' : ''}</div>
+       <div style="font-size:13px; font-weight:700">${s.label}</div>
+       ${s.hint ? `<div style="font-size:10.5px; color:var(--faint)">${s.hint}</div>` : ''}
+     </div>`;
+  }).join('');
+  
+  return `<div class="plan-cal" style="margin-top:12px; background:var(--raised)">
+    <div class="pc-head" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px"><b>💡 الخطة الديناميكية للأسبوع</b><span style="font-size:10px;background:var(--doing);color:#fff;padding:2px 6px;border-radius:10px">Beta</span></div>
+      <span class="pc-leg">زي الـ GPS 🧭 بتتغير أوتوماتيك لو نزلت حاجة مختلفة عشان تظبطلك التارجت والإجازة</span>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:10px;">
+      ${html}
+    </div>
+  </div>`;
 }  function dynamicTeacherPlanHTML(t) {
   if(!t) return '';
   const ws = weekStart(new Date());
