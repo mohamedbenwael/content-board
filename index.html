@@ -172,6 +172,89 @@
   .lt-card .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
   .lt-card .arr{margin-inline-start:auto;color:var(--faint);font-size:20px}
   .lt-empty{background:var(--panel);border:1px dashed var(--line2);border-radius:var(--radius);padding:18px;color:var(--muted);text-align:center;font-size:13px;margin-bottom:12px}
+  /* ---- Suggest pills ---- */
+  .suggest-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;align-items:center}
+  .suggest-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.3px;margin-inline-end:4px;flex-basis:100%}
+  .suggest-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px 6px 12px;
+    border-radius:20px;
+    border:1.5px solid var(--line2);
+    background:var(--panel);
+    font-size:12.5px;font-weight:700;
+    color:var(--txt);
+    cursor:pointer;
+    transition:.13s;
+  }
+  .suggest-pill:hover{border-color:var(--brand);background:var(--brand-dim)}
+  .suggest-pill .pname{color:var(--txt)}
+  .suggest-pill .psep{color:var(--faint);font-weight:400;margin:0 1px}
+  .suggest-pill .pwhen{color:var(--muted);font-weight:600;font-size:11.5px}
+  .suggest-pill .pcat{color:var(--idea);font-weight:800}
+  .suggest-pill .pbtn{
+    margin-inline-start:2px;
+    width:20px;height:20px;border-radius:50%;
+    background:var(--raised2);color:var(--muted);
+    display:grid;place-items:center;font-size:13px;font-weight:900;
+    line-height:1;flex:none;transition:.13s;
+  }
+  .suggest-pill:hover .pbtn{background:var(--brand);color:#fff}
+  .suggest-pill.occ{border-color:#F5D9B0;background:#FFFAF4}
+  .suggest-pill.occ .pcat{color:var(--doing)}
+
+  /* ---- خطة الأسبوع ---- */
+  .week-plan{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+  .week-plan-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .week-plan-head .wph-title{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.4px}
+  .week-plan-head .wph-range{font-size:11px;color:var(--faint)}
+  .week-plan-grid{display:grid;gap:6px}
+  .wp-row{display:flex;align-items:center;gap:8px}
+  .wp-name{font-size:12px;font-weight:800;color:var(--txt);width:90px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wp-days{display:flex;gap:4px;flex:1}
+  .wp-day{
+    flex:1;text-align:center;border-radius:7px;padding:5px 2px;
+    border:1px solid var(--line);background:var(--raised2);
+    font-size:10px;font-weight:700;color:var(--muted);
+    cursor:default;transition:.12s;
+  }
+  .wp-day .wd-lbl{display:block;font-size:9px;color:var(--faint);margin-bottom:2px}
+  .wp-day .wd-cat{display:block;font-size:10.5px;font-weight:800}
+  .wp-day.tdy{border-color:var(--brand);background:var(--brand-dim)}
+  .wp-day.tdy .wd-lbl{color:var(--brand)}
+  .wp-day.done{background:#E8F5EE;border-color:#BADECC}
+  .wp-day.done .wd-cat{color:#1d8a52}
+  .wp-day.deviated{background:#FFF3E0;border-color:#F0B557}
+  .wp-day.deviated .wd-cat{color:#B07800}
+  .wp-day.miss{background:var(--danger-dim);border-color:#F2C5C5}
+  .wp-day.miss .wd-cat{color:var(--danger)}
+  .wp-day.fut{opacity:.5}
+
+  /* ---- جدول المحتوى الشهري ---- */
+  .content-cal-page{max-width:860px}
+  .content-cal-page .page-head{margin-bottom:20px}
+  .month-nav{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .month-nav .mname{font-size:18px;font-weight:900;flex:1}
+  .month-nav button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:16px;display:grid;place-items:center}
+  .month-nav button:hover{border-color:var(--brand);color:var(--brand)}
+  .ccal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .ccal-lbl{text-align:center;font-size:10.5px;font-weight:800;color:var(--faint);padding:4px 0}
+  .ccal-day{
+    border-radius:10px;border:1px solid var(--line);background:var(--panel);
+    padding:8px 7px;min-height:72px;position:relative;
+  }
+  .ccal-day.empty{background:transparent;border-color:transparent}
+  .ccal-day.today{border-color:var(--brand);background:var(--brand-dim)}
+  .ccal-day.has-occ{border-color:#F0B557;background:#FFFDF5}
+  .ccal-num{font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px}
+  .ccal-day.today .ccal-num{color:var(--brand)}
+  .ccal-occ{font-size:9.5px;font-weight:700;color:#B07800;line-height:1.3;margin-bottom:3px}
+  .ccal-sug{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:10px;background:var(--raised2);color:var(--muted)}
+  .ccal-day.today .ccal-sug{background:var(--brand);color:#fff}
+  .ccal-day.has-occ .ccal-sug{background:#F0B557;color:#fff}
+  .ccal-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+  .ccal-legend .li{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-weight:700}
+  .ccal-legend .li .dot{width:10px;height:10px;border-radius:3px}
+
 
   /* leaderboard + tracking */
   .miss-badge{font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px;background:var(--danger-dim);color:var(--danger);margin-inline-start:6px}
@@ -367,6 +450,7 @@
       <button class="nav-item" data-view="rank"><span class="ico">★</span> التقييم والترتيب</button>
       <button class="nav-item" data-view="reports"><span class="ico">📊</span> التقارير الشهرية</button>
       <button class="nav-item" data-view="wreport"><span class="ico">▤</span> ملخص الأسبوع</button>
+      <button class="nav-item" data-view="contentcal"><span class="ico">🗓</span> جدول المحتوى</button>
       <button class="nav-item" id="guideBtn"><span class="ico">❓</span> الدليل</button>
       <div class="me-card">
         <div class="ava" id="meAva"></div>
@@ -438,6 +522,9 @@ const STATUSES=[{id:'idea',name:'فكرة',color:'var(--idea)'},{id:'doing',name
 const TASK_STATUSES=[{id:'requested',name:'مطلوب',color:'var(--idea)'},{id:'tdoing',name:'بيتعمل',color:'var(--doing)'},
   {id:'done',name:'خلص',color:'var(--ready)'}];
 const CATS=['كوميك','ريلز','ديزاين','كاروسيل','برومو'];
+const PLAN_CATS=['كوميك','ريلز','ديزاين']; // الأنواع اللي بتدخل في دورة التنويع (برومو مش فيها)
+// الكاروسيل شبه الديزاين قوي — بنعامله كديزاين في الاقتراحات وحساب التنويع عشان الموظف ميتلخبطش
+function effCat(cat){ return cat==='كاروسيل' ? 'ديزاين' : cat; }
 // ===== قواعد الالتزام الأسبوعي (لكل الحسابات) =====
 const COMPLIANCE_RULES=[
   {cat:'كوميك',  type:'max', n:2, label:'الكوميكس', ico:'😂', msg:'الكوميكس مش المفروض تزيد عن ٢ في الأسبوع'},
@@ -493,11 +580,300 @@ function teacherWeekCompliance(teacherId, refDate){
                     .map(x=>({rule:x.rule, count:x.got, kind:x.status}));
   return {counts, rules, issues, from:fromYmd, to:toYmd, daysLeft, weekEnding, isPast};
 }
+// ===== ترشيح المحتوى (تنزل ايه بكرة/انهارده) =====
+// المناسبات بنضيفها شهر بشهر (دلوقتي شهر 7 / يوليو بس) — أول ما يدخل شهر جديد، ضيفوا مناسباته هنا
+const OCCASIONS_FIXED=[
+  {m:7,d:23,name:'ثورة 23 يوليو'},
+];
+// مناسبات بتاريخ محدّد لسنة 2026 (بتتغيّر كل سنة زي رمضان/الأعياد/كأس العالم) — دلوقتي شهر 7 بس
+const OCCASIONS_YEARLY=[
+  {date:'2026-07-14',name:'نصف نهائي كأس العالم'},
+  {date:'2026-07-15',name:'نصف نهائي كأس العالم'},
+  {date:'2026-07-19',name:'نهائي كأس العالم'},
+];
+function findOccasion(d){
+  const ds=ymd(d);
+  const y=OCCASIONS_YEARLY.find(o=>o.date===ds); if(y) return y.name;
+  const f=OCCASIONS_FIXED.find(o=>o.m===d.getMonth()+1&&o.d===d.getDate()); if(f) return f.name;
+  return null;
+}
+const CAT_ICON={'كوميك':'😂','ريلز':'🎬','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣'};
+// آخر تصنيف اتنزل لمدرّس قبل تاريخ معيّن (بيتجاهل الأيام اللي مفيهاش نشر)
+function lastCategoryBefore(teacherId, beforeYmd){
+  const rows=PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date<beforeYmd)
+    .map(l=>({date:l.pub_date, cat:(CARDS.find(x=>x.id===l.card_id)||{}).category}))
+    .filter(x=>x.cat).sort((a,b)=>a.date<b.date?-1:1);
+  return rows.length?rows[rows.length-1].cat:null;
+}
+// دورة التنويع بدون برومو — كوميك ← ريلز ← ديزاين ← كاروسيل ← كوميك ...
+function nextCat(cat){
+  if(!cat || !PLAN_CATS.includes(cat)) return PLAN_CATS[0];
+  return PLAN_CATS[(PLAN_CATS.indexOf(cat)+1)%PLAN_CATS.length];
+}
+// ترشيح تنويع: بيبص على آخر نوع فعلي (من PLAN_CATS) ويرشّح التالي
+function suggestForTeacher(teacherId){
+  const todayStr=ymd(new Date());
+  const postedToday=PUBLOG.filter(l=>l.teacher_id===teacherId&&l.pub_date===todayStr)
+    .map(l=>effCat((CARDS.find(x=>x.id===l.card_id)||{}).category)).filter(Boolean);
+  const planPostedToday=postedToday.filter(c=>PLAN_CATS.includes(c));
+  if(planPostedToday.length){
+    const last=planPostedToday[planPostedToday.length-1];
+    const next=nextCat(last);
+    return {when:'بكرة', cat:next, reason:`النهارده نزل ${last} — بكرة نوّع بـ${next}`};
+  }
+  // لو نزل برومو النهارده بس — لسه بنقترح نفس النوع للنهارده
+  const lastPlan=PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date<todayStr)
+    .map(l=>({date:l.pub_date, cat:effCat((CARDS.find(x=>x.id===l.card_id)||{}).category)}))
+    .filter(x=>x.cat && PLAN_CATS.includes(x.cat))
+    .sort((a,b)=>a.date<b.date?-1:1);
+  const last=lastPlan.length?lastPlan[lastPlan.length-1].cat:null;
+  const next=nextCat(last);
+  return {when:'النهارده', cat:next, reason: last?`آخر حاجة نزلت كانت ${last} — نوّع بـ${next}`:`لسه مفيش حاجة اتنزلت — ابدأ بـ${next}`};
+}
+// خطة الأسبوع (سبت→جمعة):
+// - الأيام اللي فاتت: بتوري اللي فعلاً اتنزل
+// - لو نزل نوع مختلف عن المقترح، الخطة بتتعدّل منه للأيام الجاية
+// - برومو مش بيأثر على دورة التنويع
+function weeklyPlan(teacherId){
+  const ws=weekStart(), we=weekEnd(), todayStr=ymd(new Date());
+  const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
+  // آخر نوع فعلي من PLAN_CATS قبل الأسبوع
+  const beforeWeek=PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date<ymd(ws))
+    .map(l=>({date:l.pub_date, cat:effCat((CARDS.find(x=>x.id===l.card_id)||{}).category)}))
+    .filter(x=>x.cat && PLAN_CATS.includes(x.cat))
+    .sort((a,b)=>a.date<b.date?-1:1);
+  let lastCat=beforeWeek.length?beforeWeek[beforeWeek.length-1].cat:null;
+  let d=new Date(ws), days=[];
+  while(d<=we){
+    const ds=ymd(d);
+    const pub=PUBLOG.filter(l=>l.teacher_id===teacherId&&l.pub_date===ds)
+      .map(l=>effCat((CARDS.find(x=>x.id===l.card_id)||{}).category)).filter(Boolean);
+    const actualPlanCat=pub.find(c=>PLAN_CATS.includes(c))||null;
+    let cat, actual, deviated=false;
+    if(actualPlanCat){
+      // اتنزل نوع من الخطة — حتى لو مختلف، الخطة بتتحرك منه
+      deviated=(actualPlanCat!==nextCat(lastCat));
+      cat=actualPlanCat; actual=true; lastCat=actualPlanCat;
+    } else if(pub.length){
+      // اتنزل بس مش من PLAN_CATS (برومو مثلاً) — نوريه بس مش نأثر على الدورة
+      cat=pub[0]; actual=true;
+    } else if(ds<todayStr){
+      cat=null; actual=false; // يوم فات بدون نشر
+    } else {
+      cat=nextCat(lastCat); actual=false; lastCat=cat; // يوم جاي — مقترح
+    }
+    days.push({label:dayLabels[d.getDay()], date:ds, cat, actual, deviated:deviated&&actual, isToday:ds===todayStr});
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  return days;
+}
+function weekStripHtml(teacherId){
+  const days=weeklyPlan(teacherId);
+  const todayStr=ymd(new Date());
+  return `<div class="wk-strip">${days.map(x=>{
+    let cls='wk-cell';
+    if(x.isToday) cls+=' tdy';
+    else if(x.deviated) cls+=' deviated'; // اتنزل بس خلاف الخطة
+    else if(x.actual) cls+=' done';       // اتنزل صح
+    else if(x.date<todayStr && !x.actual) cls+=' miss'; // فات مانزلش
+    const ico=x.cat?(CAT_ICON[x.cat]||'•'):'—';
+    const tip=x.cat?(escAttr(x.cat)+(x.deviated?' ⚠️ خلاف الخطة':'')):'—';
+    return `<div class="${cls}" title="${tip}"><span class="wk-lbl">${x.label}</span><span class="wk-ico">${ico}</span></div>`;
+  }).join('')}</div>`;
+}
+// مناسبة النهارده/بكرة
+function occasionBanner(){
+  const today=new Date(), tomorrow=new Date(today.getTime()+864e5);
+  const occToday=findOccasion(today), occTomorrow=!occToday?findOccasion(tomorrow):null;
+  if(!occToday&&!occTomorrow) return '';
+  const when=occToday?'النهارده':'بكرة', occ=occToday||occTomorrow;
+  return `<div class="suggest-pill occ" title="فرصة تواكب المناسبة"><span class="pcat">🎉 ${when}</span><span class="psep">·</span><span class="pname">${esc(occ)}</span></div>`;
+}
+// pill مدرّس: اسمه + "النهارده:" + النوع المقترح + زرار +
+function teacherSuggestRow(t){
+  const sug=suggestForTeacher(t.id);
+  return `<div class="suggest-pill" title="💡 اقتراح: ${escAttr(sug.reason)}" onclick="openCard(null,'post','${escAttr(sug.cat)}',null,'${t.id}')">
+    <span class="pname">${esc(t.name)}</span>
+    <span class="psep">·</span>
+    <span class="pwhen">${esc(sug.when)}:</span>
+    <span class="pcat">${esc(sug.cat)}</span>
+    <span class="pbtn">＋</span>
+  </div>`;
+}
+// ===== خطة الأسبوع section =====
+function weekPlanSection(myTeachers){
+  if(!myTeachers.length) return '';
+  const ws=weekStart(), we=weekEnd();
+  const fmt=d=>d.toLocaleDateString('ar-EG',{day:'numeric',month:'short'});
+  const dayLabels=['ح','ن','ث','ر','خ','ج','س'];
+  const todayStr=ymd(new Date());
+
+  const rows=myTeachers.map(t=>{
+    const days=weeklyPlan(t.id);
+    const cells=days.map(x=>{
+      let cls='wp-day';
+      if(x.isToday) cls+=' tdy';
+      else if(x.deviated) cls+=' deviated';
+      else if(x.actual) cls+=' done';
+      else if(x.date<todayStr && !x.actual) cls+=' miss';
+      else if(x.date>todayStr) cls+=' fut';
+      const catShort=x.cat ? (x.cat==='كاروسيل'?'كاروسل':x.cat) : '—';
+      const tip=x.cat?(escAttr(x.cat)+(x.deviated?' ⚠️ خلاف الخطة':'')):'لا يوجد';
+      return `<div class="${cls}" title="${tip}">
+        <span class="wd-lbl">${x.label}</span>
+        <span class="wd-cat">${x.cat?CAT_ICON[x.cat]||'•':'—'}</span>
+      </div>`;
+    }).join('');
+    return `<div class="wp-row">
+      <span class="wp-name" title="${escAttr(t.name)}">${esc(t.name)}</span>
+      <div class="wp-days">${cells}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="week-plan">
+    <div class="week-plan-head">
+      <div>
+        <span class="wph-title">📅 خطة التنويع المقترحة للأسبوع</span>
+        <span style="display:block;font-size:10.5px;color:var(--faint);margin-top:2px">اقتراح لمساعدتك — مش شرط تمشي عليها بالظبط</span>
+      </div>
+      <span class="wph-range">${fmt(ws)} — ${fmt(we)}</span>
+    </div>
+    <div class="week-plan-grid">${rows}</div>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      <span style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:#E8F5EE;border:1px solid #BADECC;display:inline-block"></span>تم النشر</span>
+      <span style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:#FFF3E0;border:1px solid #F0B557;display:inline-block"></span>خلاف الخطة</span>
+      <span style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:var(--danger-dim);border:1px solid #F2C5C5;display:inline-block"></span>لم ينزل</span>
+      <span style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:var(--brand-dim);border:1px solid var(--brand);display:inline-block"></span>اليوم</span>
+    </div>
+  </div>`;
+}
+
+// ===== جدول المحتوى الشهري =====
+// مناسبات شهر ٧ الكاملة مع نوع المحتوى المقترح
+const CONTENT_CAL = {
+  '2026-07': [
+    {d:1,  occ:'استعداد لامتحان الكيمياء (علمي) والجغرافيا (أدبي) بكرة', idea:'مراجعة سريعة وتحفيز قبل الامتحان', sug:'دراسي', imp:'متوسطة'},
+    {d:2,  occ:'امتحان الكيمياء (علمي) والجغرافيا (أدبي)', idea:'تفاعل مع ردود أفعال الطلاب بعد الامتحان وتشجيعهم', sug:'دراسي', imp:'عالية'},
+    {d:3,  occ:'مصر × أستراليا (دور الـ32 بكأس العالم) — تأهل تاريخي لأول دور 16 في تاريخ مصر بالمونديال', idea:'احتفال بالإنجاز وفخر وطني، مناسبة بتلمس كل الفئة العمرية دي حتى لو مش دراسية', sug:'عام', imp:'عالية'},
+    {d:4,  occ:'اليوم العالمي للتعاونيات', idea:'مناسبة عالمية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:5,  occ:'امتحان اللغة الأجنبية الأولى', idea:'تشجيع بعد الامتحان', sug:'دراسي', imp:'عالية'},
+    {d:6,  occ:'استمرار أجواء الفخر بمشوار المنتخب في كأس العالم', idea:'محتوى احتفالي خفيف', sug:'عام', imp:'متوسطة'},
+    {d:7,  occ:'اليوم العالمي للشوكولاتة', idea:'محتوى خفيف وترفيهي', sug:'عام', imp:'منخفضة'},
+    {d:8,  occ:'مراجعة أخيرة قبل امتحان الفيزياء والتاريخ', idea:'تحفيز ونصايح مذاكرة سريعة', sug:'دراسي', imp:'متوسطة'},
+    {d:9,  occ:'امتحان الفيزياء (علمي) والتاريخ (أدبي)', idea:'تفاعل مع الطلاب بعد الامتحان', sug:'دراسي', imp:'عالية'},
+    {d:10, occ:'أجواء استقبال بعثة المنتخب بعد رحلة كأس العالم التاريخية', idea:'محتوى فخر واحتفاء لو الخبر لسه ساخن وقت النشر', sug:'عام', imp:'متوسطة'},
+    {d:11, occ:'اليوم العالمي للسكان', idea:'مناسبة عالمية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:12, occ:'امتحان الرياضيات البحتة', idea:'تشجيع بعد الامتحان', sug:'دراسي', imp:'عالية'},
+    {d:13, occ:'مراجعة أخيرة قبل آخر امتحان في الشهر', idea:'تحفيز "كملوا بقوة" قبل النهاية', sug:'دراسي', imp:'متوسطة'},
+    {d:14, occ:'أيام امتحانات متفرقة حسب الشعبة قبل النهاية', idea:'متابعة وتشجيع مستمر', sug:'دراسي', imp:'متوسطة'},
+    {d:15, occ:'اليوم العالمي لمهارات الشباب', idea:'مناسبة بتناسب بالظبط طلاب على أعتاب الجامعة أو سوق العمل', sug:'دراسي/عام', imp:'عالية'},
+    {d:16, occ:'آخر يوم امتحانات رسميًا (الأحياء، الرياضيات التطبيقية، الإحصاء)', idea:'لحظة "خلصنا!" — أهم لحظة عاطفية في الشهر كله للطلاب', sug:'دراسي', imp:'عالية جدًا'},
+    {d:17, occ:'اليوم العالمي للإيموجي', idea:'محتوى خفيف وتفاعلي يناسب مود الفرحة بعد الامتحانات', sug:'عام', imp:'متوسطة'},
+    {d:18, occ:'يوم نيلسون مانديلا العالمي (يوم العطاء والعمل التطوعي)', idea:'مناسبة عالمية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:19, occ:'نهائي كأس العالم 2026', idea:'حدث عالمي ضخم، تفاعل جماهيري متوقع حتى من غير مصر', sug:'عام', imp:'عالية'},
+    {d:20, occ:'اليوم العالمي للشطرنج', idea:'مناسبة عالمية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:21, occ:'بداية فترة ترقب نتيجة الثانوية العامة', idea:'نصايح للطلاب للتعامل مع قلق الانتظار', sug:'دراسي', imp:'عالية'},
+    {d:22, occ:'فترة الترقب مستمرة', idea:'محتوى عن حياة ما بعد الثانوية عمومًا', sug:'دراسي', imp:'عالية'},
+    {d:23, occ:'ذكرى ثورة 23 يوليو (عيد وطني رسمي)', idea:'مناسبة وطنية مصرية مهمة، إجازة رسمية', sug:'عام', imp:'عالية'},
+    {d:24, occ:'فترة الترقب مستمرة', idea:'تذكير بخطوات الاستعلام عن النتيجة أول ما تظهر', sug:'دراسي', imp:'عالية'},
+    {d:25, occ:'فترة الترقب / تجهيز محتوى التنسيق', idea:'تمهيد لموضوع التنسيق والكليات قبل ما النتيجة تطلع', sug:'دراسي', imp:'عالية'},
+    {d:26, occ:'فترة الترقب مستمرة', idea:'قصص وتجارب ملهمة من خريجين سابقين', sug:'دراسي', imp:'عالية'},
+    {d:27, occ:'فترة الترقب مستمرة', idea:'تجهيز فريق الرد السريع استعدادًا ليوم الإعلان', sug:'دراسي', imp:'عالية'},
+    {d:28, occ:'اليوم العالمي لالتهاب الكبد الفيروسي', idea:'مناسبة عالمية صحية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:29, occ:'نافذة محتملة لظهور نتيجة الثانوية العامة', idea:'جاهزين للنشر الفوري لحظة إعلان النتيجة', sug:'دراسي', imp:'عالية جدًا'},
+    {d:30, occ:'اليوم العالمي للصداقة', idea:'مناسبة عالمية خفيفة', sug:'عام', imp:'منخفضة'},
+    {d:31, occ:'نهاية الشهر — استعداد لبداية التنسيق أول أغسطس', idea:'تمهيد لمرحلة التنسيق للي النتيجة ظهرت له', sug:'دراسي', imp:'عالية'},
+  ]
+};
+const CONTENT_CAL_NOTE = {
+  '2026-07': 'ملحوظة: نتيجة الثانوية العامة متوقعة في أي وقت بين 20 يوليو وأول أغسطس تقريبًا — جهزوا محتوى النتيجة بدري عشان تكونوا جاهزين للنشر فور ظهورها.'
+};
+let contentCalMonth = '2026-07'; // الشهر الحالي المعروض
+function contentCalView(){
+  const [yr, mo] = contentCalMonth.split('-').map(Number);
+  const monthName = new Date(yr, mo-1, 1).toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
+  const firstDay = new Date(yr, mo-1, 1);
+  const lastDay  = new Date(yr, mo, 0);
+  const todayStr = ymd(new Date());
+  const events   = CONTENT_CAL[contentCalMonth] || [];
+  const evMap    = {};
+  events.forEach(e => evMap[e.d] = e);
+
+  // رأس الأيام (أحد → سبت)
+  const dayLabels = ['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+  const heads = dayLabels.map(l=>`<div class="ccal-lbl">${l}</div>`).join('');
+
+  // خلايا فاضية قبل أول يوم
+  let cells = '';
+  for(let i=0;i<firstDay.getDay();i++) cells+=`<div class="ccal-day empty"></div>`;
+
+  for(let d=1;d<=lastDay.getDate();d++){
+    const ds=`${contentCalMonth}-${String(d).padStart(2,'0')}`;
+    const ev=evMap[d];
+    const isToday=ds===todayStr;
+    let cls='ccal-day'+(isToday?' today':'')+(ev?' has-occ':'');
+    cells+=`<div class="${cls}">
+      <div class="ccal-num">${d}</div>
+      ${ev?`<div class="ccal-occ">${esc(ev.occ)}</div>`:''}
+      ${ev?`<span class="ccal-sug">${esc(ev.sug)}</span>`:''}
+    </div>`;
+  }
+
+  // أزرار التنقل — بس لو في شهور تانية
+  const prevMonth = contentCalMonth==='2026-07'?null:'2026-07';
+  const nextMonth = null; // لسه مفيش شهر ٨
+  const prevBtn = prevMonth
+    ? `<button onclick="contentCalMonth='${prevMonth}';render()">&#8250;</button>`
+    : `<button disabled style="opacity:.3">&#8250;</button>`;
+  const nextBtn = nextMonth
+    ? `<button onclick="contentCalMonth='${nextMonth}';render()">&#8249;</button>`
+    : `<button disabled style="opacity:.3">&#8249;</button>`;
+
+  const note = CONTENT_CAL_NOTE[contentCalMonth];
+  const impColor = i => i==='عالية جدًا' ? '#D64545' : i==='عالية' ? '#E0922A' : i==='متوسطة' ? '#4A6FB5' : '#9AA6BC';
+
+  return `<div class="content-cal-page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">جدول محتوى المدرسين</div>
+        <div class="page-sub">مناسبات وأحداث الشهر — اقتراح موضوع المحتوى المناسب لصفحات المدرسين</div>
+      </div>
+    </div>
+    ${note?`<div style="background:#FFFDF5;border:1px solid #F0B557;border-radius:var(--radius-s);padding:12px 14px;font-size:12.5px;font-weight:700;color:#8A6416;margin-bottom:16px;line-height:1.6">⚠️ ${esc(note)}</div>`:''}
+    <div class="month-nav">
+      ${prevBtn}
+      <span class="mname">${monthName}</span>
+      ${nextBtn}
+    </div>
+    <div class="ccal-grid">${heads}${cells}</div>
+    <div class="ccal-legend">
+      <div class="li"><span class="dot" style="background:#F0B557"></span> مناسبة / حدث</div>
+      <div class="li"><span class="dot" style="background:var(--brand-dim);border:1px solid var(--brand)"></span> اليوم</div>
+    </div>
+    <div style="margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px">
+      <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:12px;letter-spacing:.4px">المناسبات والاقتراحات</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${events.map(e=>`<div style="display:flex;flex-direction:column;gap:4px;padding:9px 0;border-bottom:1px solid var(--line)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;font-weight:800;color:var(--muted);width:50px;flex:none">${String(e.d)} يوليو</span>
+            <span style="flex:1;font-size:13px;font-weight:700">${esc(e.occ)}</span>
+            <span style="font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:12px;background:var(--brand-dim);color:var(--brand);flex:none">${esc(e.sug)}</span>
+            ${e.imp?`<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:12px;color:#fff;flex:none;background:${impColor(e.imp)}">${esc(e.imp)}</span>`:''}
+          </div>
+          ${e.idea?`<div style="font-size:12px;color:var(--muted);padding-inline-start:60px;line-height:1.5">${esc(e.idea)}</div>`:''}
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
 const REEL_TYPES=[{id:'youtube',name:'يوتيوب'},{id:'hall',name:'قاعة'},{id:'studio',name:'استوديو'}];
 const TASK_TYPES=['طلب ديزاين','طلب فيديو','خطة','مراجعة','تصوير','أخرى'];
 const PRIORITIES=[{id:'urgent',name:'مستعجل',ico:'🔴',rank:0},{id:'important',name:'مهم',ico:'🟠',rank:1},{id:'normal',name:'عادي',ico:'⚪',rank:2}];
 const QUALITY=[{v:1,name:'سيء'},{v:2,name:'عادي'},{v:3,name:'كويس'},{v:4,name:'ممتاز'}];
 function qualityName(v){const q=QUALITY.find(x=>x.v===v);return q?q.name:'';}
+// تحويل تقييم القائد لنسبة: عادي = شغل مظبوط جاهز للنشر (مش نص الطريق)، كويس = مجهود ولمسة زيادة، ممتاز = فكرة برا الصندوق
+const QUALITY_PCT={1:0.40,2:0.80,3:0.90,4:1.00};
 const EFFORTS=[{m:5,name:'٥ دقايق'},{m:15,name:'ربع ساعة'},{m:30,name:'نص ساعة'},{m:60,name:'ساعة'},{m:120,name:'ساعتين'},{m:240,name:'أكتر من كده'}];
 function prio(id){return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2];}
 function effortName(m){const e=EFFORTS.find(x=>x.m===m);return e?e.name:'';}
@@ -683,6 +1059,7 @@ async function enterApp(){
   }
   await checkWeeklyReview();
   await checkPeriodicNotifs();
+  await checkBonusNotifs();
   await checkBalanceAlerts();
   hide('loading'); show('app');
   wireApp(); render();
@@ -839,9 +1216,7 @@ function memberQuality(memberId, ym){
   ym = ym || ymNow();
   const rated=CARDS.filter(c=>c.assignee_id===memberId && (c.kind||'post')==='post' && c.quality && (c.created_at||'').slice(0,7)===ym);
   if(!rated.length) return null;
-  const avg=rated.reduce((s,c)=>s+c.quality,0)/rated.length;
-  // التعديل: سيء=25%، عادي=50%، كويس=75%، ممتاز=100%
-  return avg / 4; 
+  return rated.reduce((s,c)=>s+(QUALITY_PCT[c.quality]??(c.quality/4)),0)/rated.length;
 }
 // نمو الصفحة: مقارنة أرقام الشهر الحالي بالشهر اللي فات (%) — 0..1 أو null
 // بيقيس التحسن النسبي مش الأرقام الخام عشان يكون عادل بين الصفحات الكبيرة والصغيرة
@@ -941,7 +1316,84 @@ function memberBalanceScore(memberId, ym){
   return weekScores.reduce((s,v)=>s+v,0)/weekScores.length;
 }
 
-// إدارة المدرّس: متوسط تقييمات القائد للشهر اللي فات لمدرّسي العضو — 0..1 أو null
+// أسابيع الشهر المكتملة (سبت→جمعة) — نفس تقسيم memberBalanceScore بالظبط
+function monthWeeks(ym){
+  const mStart=monthStartOf(ym);
+  const [yy,mm]=ym.split('-').map(Number);
+  const monthEnd=new Date(yy,mm,1);
+  const cutoff = (ym===ymNow()) ? new Date(new Date().setHours(23,59,59,999)) : monthEnd;
+  let d=new Date(mStart);
+  while(d.getDay()!==6) d.setDate(d.getDate()+1);
+  const weeks=[];
+  while(d<monthEnd){
+    const fri=new Date(d); fri.setDate(d.getDate()+6);
+    if(fri<=cutoff) weeks.push({fromYmd:ymd(d), toYmd:ymd(fri)});
+    d.setDate(d.getDate()+7);
+  }
+  return weeks;
+}
+// درجة توازن العضو في أسبوع محدد (0..1) — نفس منطق calcWeek جوه memberBalanceScore، بدون تسامح الأسبوع الناقص لأننا بنحسب أسابيع مكتملة بس
+function memberWeekBalanceScore(memberId, fromYmd, toYmd){
+  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  const active=ts.filter(t=>!t.assigned_at || t.assigned_at.slice(0,10)<=toYmd);
+  if(!active.length) return null;
+  const scores=active.map(t=>{
+    const counts=teacherCatCounts(t.id, fromYmd, toYmd);
+    const minRules=COMPLIANCE_RULES.filter(r=>r.type==='min');
+    const minScore=minRules.length? minRules.reduce((s,r)=>s+Math.min(1,(counts[r.cat]||0)/r.n),0)/minRules.length : 1;
+    const maxPenalty=COMPLIANCE_RULES.filter(r=>r.type==='max').reduce((pen,r)=>{const got=counts[r.cat]||0; return got>r.n?pen+0.15*(got-r.n):pen;},0);
+    return Math.max(0,minScore-maxPenalty);
+  });
+  return scores.reduce((a,b)=>a+b,0)/scores.length;
+}
+// عدد الأيام الفايتة المحتسبة (بعد السماح المعتاد بيوم/أسبوع) لعضو في مدى تاريخي محدد
+function memberWeekMissedCount(memberId, ym, fromYmd, toYmd){
+  const teachers=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  let missed=0;
+  teachers.forEach(t=>{
+    const raw=missedDaysForTeacher(t.id, ym).filter(d=>d>=fromYmd&&d<=toYmd);
+    const forgiven=forgivenDaysForTeacher(t.id, ym);
+    missed += raw.filter(d=>!forgiven.has(d)).length;
+  });
+  return missed;
+}
+// هل نزل بوست "ممتاز" لعضو في مدى تاريخي محدد
+function weekHasExcellentPost(memberId, fromYmd, toYmd){
+  return PUBLOG.some(l=>{
+    if(l.pub_date<fromYmd || l.pub_date>toYmd) return false;
+    const c=CARDS.find(x=>x.id===l.card_id);
+    return c && c.assignee_id===memberId && (c.kind||'post')==='post' && c.quality===4;
+  });
+}
+// ملخص البونص الأسبوعي والخصم الشهري لعضو
+// بونص: بطل الالتزام (٥٠ج — صفر أيام فايتة + توازن ١٠٠٪) + بوست ممتاز (٥٠ج — مستقلين، ممكن ياخد الاتنين)
+// خصم: توازن تحت ٥٠٪ أسبوعين ورا بعض / أكتر من ٣ أيام فايتة في الشهر / سكور شهري تحت ٥٥
+function memberBonusDeduction(memberId, ym){
+  const teachers=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  if(!teachers.length) return null;
+  const weeks=monthWeeks(ym).map(w=>{
+    const missed=memberWeekMissedCount(memberId, ym, w.fromYmd, w.toYmd);
+    const balScore=memberWeekBalanceScore(memberId, w.fromYmd, w.toYmd);
+    const compliant = missed===0 && balScore!==null && balScore>=1;
+    const excellent = weekHasExcellentPost(memberId, w.fromYmd, w.toYmd);
+    let bonus=0; if(compliant) bonus+=50; if(excellent) bonus+=50;
+    return {...w, missed, balScore, compliant, excellent, bonus};
+  });
+  const totalBonus=weeks.reduce((s,w)=>s+w.bonus,0);
+  const deductions=[];
+  for(let i=1;i<weeks.length;i++){
+    if(weeks[i-1].balScore!==null && weeks[i].balScore!==null && weeks[i-1].balScore<0.5 && weeks[i].balScore<0.5){
+      deductions.push({type:'balance', text:'توازن الأنواع نازل تحت ٥٠٪ أسبوعين على التوالي'});
+      break;
+    }
+  }
+  const monthMissed=memberMissed(memberId, ym);
+  if(monthMissed>3) deductions.push({type:'missed', text:`${monthMissed} أيام فايتة من غير عذر الشهر ده (أكتر من الحد المسموح ٣)`});
+  const sc=memberScore(memberId, ym);
+  if(sc.score!==null && sc.score<55) deductions.push({type:'score', text:`التقييم الشهري ${sc.score}٪ — تحت ٥٥٪`});
+  return {weeks, totalBonus, deductions};
+}
+
 function memberManageScore(memberId, ym){
   ym = ym ? shiftYm(ym,-1) : shiftYm(ymNow(),-1); // الشهر اللي قبل الشهر المطلوب
   const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
@@ -1174,6 +1626,7 @@ function render(){
   else if(view==='rank')main.innerHTML=rankView();
   else if(view==='wreport')main.innerHTML=weeklyReportView();
   else if(view==='linktree')main.innerHTML=linkTreeView();
+  else if(view==='contentcal')main.innerHTML=contentCalView();
   if(view==='board')wireBoard();
   syncHistory();
 }
@@ -1217,7 +1670,10 @@ function boardView(){
   const all=visibleCards();
   const isTask=boardKind==='task';
   const cs=all.filter(c=>(c.kind||'post')===boardKind);
-  const ids=scopeIds();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  const ids=scopeIds();
+  // مدرّسين النطاق الحالي بس: أنا لوحدي في تبويب «شغلي»، أو الفريق من غيري في تبويب «شغل التيم»
+  const teacherIds = ME.role==='member' ? [ME.id] : (boardScope==='team' ? ids.filter(id=>id!==ME.id) : [ME.id]);
+  const myTeachers=TEACHERS.filter(t=>teacherIds.includes(t.owner_id));
   let hint='';
   if(!isTask && myTeachers.length===0){
     hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم التيم ليدر أو الأكونت مانجر بتاعك يضيفلك مدرّسين.'}</div>`;
@@ -1236,8 +1692,15 @@ function boardView(){
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
   const scopeSub = ME.role!=='member' ? (boardScope==='team'?' · شغل تيمك':' · شغلك إنت') : '';
   const planCal = (scopeTeacher && !isTask) ? planCalendar(T(scopeTeacher)) : '';
+  const occ = isTask ? '' : occasionBanner();
+  const suggestRows = isTask ? '' : (scopeTeacher ? teacherSuggestRow(T(scopeTeacher)) : myTeachers.map(teacherSuggestRow).join(''));
+  const suggest = suggestRows ? `<div class="suggest-list">
+    <span class="suggest-label">💡 اقتراح النهارده — مش إلزامي</span>
+    ${occ}${suggestRows}
+  </div>` : (occ ? `<div class="suggest-list">${occ}</div>` : '');
+  const weekPlan = (!isTask && myTeachers.length) ? weekPlanSection(myTeachers) : '';
   return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}${scopeSub}</div></div></div>
-    ${tabs}${scopeTabs}${planBanner}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
+    ${tabs}${scopeTabs}${planBanner}${suggest}${weekPlan}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>${olderBtn()}`;
 }
 function planCalendar(t){
@@ -1751,7 +2214,40 @@ function myScoreCard(ym){
     <div style="font-size:13px;color:var(--muted)">${sc===null?'لسه بتتقيّم':'من ١٠٠'} · ترتيبك <b style="color:var(--brand)">${me._pos}</b> من ${rows.length} في كل الموظفين</div>
     ${breakdown}</div>`;
 }
+function bonusCard(memberId, ym){
+  const info=memberBonusDeduction(memberId, ym);
+  if(!info) return '';
+  const u=U(memberId);
+  const weeksHtml=info.weeks.map((w,i)=>{
+    const tags=[w.compliant?'✅ بطل الالتزام':'', w.excellent?'⭐ بوست ممتاز':''].filter(Boolean).join(' + ')||'<span style="color:var(--faint)">مفيش بونص الأسبوع ده</span>';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px">
+      <span style="color:var(--muted);width:64px;flex:none">أسبوع ${i+1}</span>
+      <span style="flex:1">${tags}</span>
+      <span style="font-weight:800;color:${w.bonus?'var(--ready)':'var(--faint)'}">${w.bonus?'+'+w.bonus+'ج':'—'}</span>
+    </div>`;
+  }).join('');
+  const dedHtml=info.deductions.length
+    ? info.deductions.map(d=>`<div style="font-size:12px;color:var(--danger);padding:4px 0">⚠️ ${esc(d.text)}</div>`).join('')
+    : `<div style="font-size:12px;color:var(--faint)">مفيش خصومات الشهر ده ✓</div>`;
+  return `<div style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      ${avaP(memberId,30)}
+      <div style="flex:1;font-weight:800;font-size:13.5px">${esc(u.name)}</div>
+      <div style="font-weight:900;font-size:16px;color:${info.totalBonus?'var(--ready)':'var(--faint)'}">${info.totalBonus}ج</div>
+    </div>
+    ${weeksHtml}
+    <div style="margin-top:8px">${dedHtml}</div>
+  </div>`;
+}
+// قسم البونص والخصم — كل واحد بيشوف شغله بس، والقائد/المانجر بيشوفوا اللي تحتهم بس (نفس صلاحيات myMembers)
+function bonusDeductionSection(ym){
+  const ids = ME.role==='member' ? [ME.id] : myMembers();
+  const cards = ids.map(id=>bonusCard(id, ym)).filter(Boolean);
+  if(!cards.length) return '';
+  return `<div class="nav-group-label" style="margin:18px 4px 10px;font-size:13.5px;font-weight:800">💰 البونص والخصم — ${ymLabel(ym)}</div>${cards.join('')}`;
+}
 function rankView(){
+
   // فحص وضع الصيانة
   if (RANK_MAINTENANCE) {
     return `<div class="page-head">
@@ -1781,6 +2277,7 @@ function rankView(){
     <div class="page-sub">انتظام النزول ٣٥٪ + التوازن ٣٠٪ + جودة الشغل ٢٠٪ + نمو الصفحة ١٥٪</div></div></div>
     ${monthNav}${liveNote}
     ${(isMember||ME.role==='lead'||ME.role==='manager')?myScoreCard(ym):''}
+    ${bonusDeductionSection(ym)}
     ${!isMember?`<div class="seg-tabs">
       <button class="${rankTab==='members'?'on':''}" onclick="rankTab='members';render()">ترتيب الموظفين</button>
       <button class="${rankTab==='teams'?'on':''}" onclick="rankTab='teams';render()">🏆 ترتيب التيمات</button>
@@ -3067,14 +3564,15 @@ window.nextTour=function(){clearTourEl();tourIdx++; if(tourIdx>=tourList.length)
 window.addEventListener('resize',()=>{if(document.getElementById('tourBackdrop').classList.contains('show'))showTourStep();});
 
 /* ---------- card modal ---------- */
-window.openCard=function(id,newKind){
+window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher){
   const c=id?CARDS.find(x=>x.id===id):null;
   const kind = c ? (c.kind||'post') : (newKind||boardKind||'post');
   const isTask = kind==='task';
   const ids=scopeIds();
   const assignable=ME.role==='member'?PROFILES.filter(u=>u.id===ME.id):PROFILES.filter(u=>ids.includes(u.id)&&u.role!=='admin');
   if(assignable.length===0) assignable.push(ME);
-  const initAssignee = c?c.assignee_id:ME.id;
+  const presetTeacherObj = (!c && presetTeacher) ? TEACHERS.find(t=>t.id===presetTeacher) : null;
+  const initAssignee = c ? c.assignee_id : (presetTeacherObj ? presetTeacherObj.owner_id : ME.id);
   const teachersForOwner=(oid)=>TEACHERS.filter(t=>t.owner_id===oid);
   const teacherOpts=teachersForOwner(initAssignee);
   const cmts=c?COMMENTS.filter(x=>x.card_id===c.id):[];
@@ -3108,12 +3606,12 @@ window.openCard=function(id,newKind){
       ${taskLocked?'<div class="lt-empty" style="margin-top:4px">دي تاسك مطلوبة منك — تقدر تحرّكها لـ «بيتعمل» من البورد، والتيم ليدر يأكّد إنها خلصت.</div>':''}`;
   } else {
     fields=`
-      <div class="field"><label>عنوان البوست</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
-      <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${c&&c.teacher_id===t.id?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
-      <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===ME.id?'selected':'')}>${u.name}</option>`).join('')}</select></div></div>
-      <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat" onchange="document.getElementById('reelWrap').style.display=this.value==='ريلز'?'block':'none'">${CATS.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>عنوان البوست</label><input id="f_title" value="${c?escAttr(c.title):(titleHint?escAttr(titleHint):'')}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
+      <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${(c&&c.teacher_id===t.id)||(!c&&(presetTeacher||scopeTeacher)===t.id)?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
+      <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===initAssignee?'selected':'')}>${u.name}</option>`).join('')}</select></div></div>
+      <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat" onchange="document.getElementById('reelWrap').style.display=this.value==='ريلز'?'block':'none'">${CATS.map(x=>`<option ${(c&&c.category===x)||(!c&&presetCat===x)?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>المنصة</label><select id="f_plat">${PLATS.map(p=>`<option value="${p.id}" ${c&&c.platform===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div></div>
-      <div class="field" id="reelWrap" style="display:${c&&c.category==='ريلز'?'block':'none'}"><label>نوع الريل</label><select id="f_subtype">${REEL_TYPES.map(r=>`<option value="${r.id}" ${c&&c.subtype===r.id?'selected':''}>${r.name}</option>`).join('')}</select></div>
+      <div class="field" id="reelWrap" style="display:${(c&&c.category==='ريلز')||(!c&&presetCat==='ريلز')?'block':'none'}"><label>نوع الريل</label><select id="f_subtype">${REEL_TYPES.map(r=>`<option value="${r.id}" ${c&&c.subtype===r.id?'selected':''}>${r.name}</option>`).join('')}</select></div>
       <div class="two">${prioField}${effortField}</div>
       <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div>
       <div class="field"><label>لينك البوست (اختياري)</label><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
@@ -3244,7 +3742,7 @@ async function notify(userId,type,text,cardId){
   if(!userId||userId===ME.id) return; // مش بنبعت لنفسنا
   await sb.from('notifications').insert({user_id:userId,actor_id:ME.id,type,text,card_id:cardId||null});
 }
-function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':t==='post_review'?'🔔':t==='post_rated'?'⭐':t==='post_approved'?'✅':t==='signup'?'📝':t==='month_start'?'🗓':t==='miss_alert'?'⚠️':t==='due_alert'?'⏰':t==='balance_alert'?'📊':t==='balance_team'?'📋':'🔔';}
+function notifIco(t){return t==='task_assigned'?'📋':t==='task_progress'?'✅':t==='post_returned'?'↩':t==='weekly_review'?'🗓':t==='post_review'?'🔔':t==='post_rated'?'⭐':t==='post_approved'?'✅':t==='signup'?'📝':t==='month_start'?'🗓':t==='miss_alert'?'⚠️':t==='due_alert'?'⏰':t==='balance_alert'?'📊':t==='balance_team'?'📋':t==='bonus_earned'?'🎉':'🔔';}
 function visibleNotifs(){
   return NOTIFS.filter(n=>!(n.type==='weekly_review' && ME.role!=='lead' && ME.role!=='manager'));
 }
@@ -3420,6 +3918,20 @@ async function checkPeriodicNotifs(){
     for(const it of inserts){ await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:it.type,text:it.text}); }
     await refetchMyNotifs();
   }
+}
+// إشعار بونص الأسبوع لما آخر أسبوع مكتمل يستوفي بطل الالتزام و/أو بوست ممتاز (مرة واحدة لكل أسبوع)
+async function checkBonusNotifs(){
+  if(ME.role!=='member') return;
+  const info=memberBonusDeduction(ME.id, ymNow());
+  if(!info || !info.weeks.length) return;
+  const lastWeek=info.weeks[info.weeks.length-1];
+  if(lastWeek.bonus<=0) return;
+  const already=NOTIFS.some(n=>n.type==='bonus_earned' && (n.text||'').includes(lastWeek.fromYmd));
+  if(already) return;
+  const parts=[lastWeek.compliant?'بطل الالتزام':'', lastWeek.excellent?'بوست ممتاز':''].filter(Boolean);
+  await sb.from('notifications').insert({user_id:ME.id,actor_id:ME.id,type:'bonus_earned',
+    text:`🎉 مبروك، كسبت بونص ${lastWeek.bonus}ج الأسبوع ده (${parts.join(' + ')}) — أسبوع ${lastWeek.fromYmd}`});
+  await refetchMyNotifs();
 }
 
 /* ---------- wiring ---------- */
