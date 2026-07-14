@@ -1666,11 +1666,14 @@ function statStrip(cs){
     ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
 }
 function olderBtn(){ return loadedAll?'':`<div style="text-align:center;margin-top:20px"><button class="btn ghost" style="height:38px;padding:0 18px" onclick="loadOlderData(this)">⤓ حمّل الشغل الأقدم (قبل ٣ شهور)</button></div>`; }
-function boardView(){
+function boardView(){function boardView(){
   const all=visibleCards();
   const isTask=boardKind==='task';
   const cs=all.filter(c=>(c.kind||'post')===boardKind);
-  const ids=scopeIds();const myTeachers=TEACHERS.filter(t=>ids.includes(t.owner_id));
+  const ids=scopeIds();
+  // مدرّسين النطاق الحالي بس: أنا لوحدي في تبويب «شغلي»، أو الفريق من غيري في تبويب «شغل التيم»
+  const teacherIds = ME.role==='member' ? [ME.id] : (boardScope==='team' ? ids.filter(id=>id!==ME.id) : [ME.id]);
+  const myTeachers=TEACHERS.filter(t=>teacherIds.includes(t.owner_id));
   let hint='';
   if(!isTask && myTeachers.length===0){
     hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم التيم ليدر أو الأكونت مانجر بتاعك يضيفلك مدرّسين.'}</div>`;
@@ -1687,16 +1690,24 @@ function boardView(){
       <button class="${boardScope==='me'?'on':''}" onclick="boardScope='me';render()">👤 شغلي</button>
       <button class="${boardScope==='team'?'on':''}" onclick="boardScope='team';render()">👥 شغل التيم</button></div>` : '';
   const planBanner = scopeTeacher ? `<div class="lt-empty" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between"><span>📋 خطة المدرّس: <b style="color:var(--txt)">${T(scopeTeacher).name}</b></span><button class="btn ghost" style="height:32px" onclick="scopeTeacher=null;render()">✕ كل المدرّسين</button></div>` : '';
-  
-  // التعديل هنا: دمجنا التقويم القديم مع الخطة الديناميكية الجديدة
-  const planCal = (scopeTeacher && !isTask) ? planCalendar(T(scopeTeacher)) + dynamicTeacherPlanHTML(T(scopeTeacher)) : '';
   const scopeSub = ME.role!=='member' ? (boardScope==='team'?' · شغل تيمك':' · شغلك إنت') : '';
   
+  // --- دول اللي طاروا ورجعناهم (الاقتراحات وخطة الأسبوع) ---
+  const occ = isTask ? '' : occasionBanner();
+  const suggestRows = isTask ? '' : (scopeTeacher ? teacherSuggestRow(T(scopeTeacher)) : myTeachers.map(teacherSuggestRow).join(''));
+  const suggest = suggestRows ? `<div class="suggest-list">
+    <span class="suggest-label">💡 اقتراح النهارده — مش إلزامي</span>
+    ${occ}${suggestRows}
+  </div>` : (occ ? `<div class="suggest-list">${occ}</div>` : '');
+  const weekPlan = (!isTask && myTeachers.length) ? weekPlanSection(myTeachers) : '';
+  
+  // --- الإضافة الجديدة: التقويم القديم مدموج مع الخطة الديناميكية ---
+  const planCal = (scopeTeacher && !isTask) ? planCalendar(T(scopeTeacher)) + dynamicTeacherPlanHTML(T(scopeTeacher)) : '';
+  
   return `<div class="page-head"><div><div class="page-title">${scopeTeacher?'خطة '+T(scopeTeacher).name:'البورد'}</div><div class="page-sub">${isTask?'التاسكات — شغل مش بيتحاسب في التقييم':'البوستات — اسحب الكارت لتغيير حالته'}${scopeSub}</div></div></div>
-    ${tabs}${scopeTabs}${planBanner}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
+    ${tabs}${scopeTabs}${planBanner}${suggest}${weekPlan}${planCal}${statStrip(cs)}${hint}${isTask?'':`<div class="filters">${chip('الكل',null)}<span class="sep"></span>${CATS.map(c=>chip(c,c)).join('')}</div>`}
     <div class="board">${cols}</div>${olderBtn()}`;
-}
-  function dynamicTeacherPlanHTML(t) {
+}  function dynamicTeacherPlanHTML(t) {
   if(!t) return '';
   const ws = weekStart(new Date());
   const we = weekEnd(new Date());
