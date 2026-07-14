@@ -4086,7 +4086,7 @@ function buildContext(){
       const cat = (CARDS.find(c => c.id === l.card_id)||{}).category || 'غير معروف';
       byType[cat] = (byType[cat]||0) + 1;
     });
-    const rep = MONTHLY_REPORTS?.find?.(r => r.teacher_id === t.id) || null;
+    const rep = REPORTS?.find?.(r => r.teacher_id === t.id) || null;
     const sug = suggestForTeacher(t.id);
     return `• ${t.name}: نزّل ${logs.length} بوست آخر ٣٠ يوم | أنواع: ${Object.entries(byType).map(([k,v])=>`${k}(${v})`).join(', ')||'لا يوجد'} | اقتراح النهارده: ${sug.when} → ${sug.cat} (${sug.reason})${rep ? ` | تقييم الشهر: ${rep.total_score?.toFixed?.(1)||'—'}` : ''}`;
   }).join('\n');
