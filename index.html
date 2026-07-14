@@ -4167,7 +4167,7 @@ const res = await fetch('https://yplxjertpilrqnyezdaq.supabase.co/functions/v1/c
       document.getElementById('chatSend').disabled = false;
       return;
     }
-    const reply = data.reply || 'معلش، فيه مشكلة. جرب تاني.';
+    const reply = data.reply || `⚠️ الرد رجع من غير حقل reply. ده اللي رجع فعليًا:\n${rawText.slice(0,500)}`;
     chatShowTyping(false);
     chatRenderMsg('ai', reply);
     chatHistory.push({role:'assistant', content: reply});
