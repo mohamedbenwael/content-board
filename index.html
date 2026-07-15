@@ -4095,6 +4095,17 @@ function buildContext(){
   const didPostToday = TEACHERS.filter(t => todayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
   const didntPostToday = TEACHERS.filter(t => !todayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
 
+  // أداء الموظفين (الأعضاء) — نفس الحساب المستخدم في صفحة "التقييم والترتيب"
+  const ymCur = ymNow();
+  const members = PROFILES.filter(p => p.role==='member' && p.active!==false);
+  const employeesSummary = members.map(m => {
+    const sc = memberScore(m.id, ymCur);
+    const bonus = bonusUnitsFor(m.id, ymCur);
+    const ded = deductionDaysFor(m.id, ymCur);
+    if(sc.score===null) return `• ${m.name}: مفيش بيانات كفاية لتقييمه الشهر ده`;
+    return `• ${m.name}: تقييم عام ${sc.score}٪ | التزام بالنشر ${sc.postingPct??'—'}٪ | جودة الشغل ${sc.qualityPct??'—'}٪ | توازن المحتوى ${sc.balancePct??'—'}٪ | نمو ${sc.growthPct??'—'}٪ | بوستات فاتته ${sc.missed} | بونص هذا الشهر ${bonus} | خصومات ${ded>0?fmtDays(ded):'لا يوجد'}`;
+  }).join('\n');
+
   return `أنت مساعد ذكي لتيم محتوى في شركة تعليمية مصرية اسمها "A to Z". التيم بيتابع صفحات مدرسين على السوشيال ميديا ويشغّل محتواهم. بتجاوب باللهجة المصرية بشكل ودي ومختصر.
 
 == بيانات النهارده (${todayStr}) ==
@@ -4103,6 +4114,10 @@ function buildContext(){
 
 == ملخص المدرسين (آخر ٣٠ يوم) ==
 ${teachersSummary || 'لا توجد بيانات'}
+
+== أداء الموظفين (الشهر الحالي ${ymCur}) ==
+${employeesSummary || 'لا توجد بيانات'}
+ملاحظة: "أضعف موظف" أو "أفضل موظف" لازم تحكم عليه بالأرقام دي فقط (تقييم عام، التزام، جودة)، ومتخترعش أسماء أو تفاصيل مش موجودة هنا.
 
 == معلومات عن السايت ==
 السايت ده نظام إدارة محتوى داخلي للتيم. فيه: بورد بوستات (حالات: فكرة → جاري → مراجعة → جاهز → منشور)، خطة أسبوعية مقترحة للتنويع (كوميك، ريلز، ديزاين)، تقييم شهري للمدرسين، وجدول محتوى بمناسبات الشهر. البرومو والكاروسيل مش داخلين في دورة التنويع التلقائي.`;
