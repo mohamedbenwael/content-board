@@ -514,25 +514,17 @@
       <span class="ch-ico">🤖</span>
       <div style="flex:1">
         <div class="ch-title">المساعد الذكي</div>
-        <div class="ch-sub">اسأل عن أي حاجة في السايت</div>
+        <div class="ch-sub">اختار سؤالك من تحت</div>
       </div>
       <button class="ch-close" id="chatClose">✕</button>
     </div>
     <div class="chat-msgs" id="chatMsgs">
       <div class="cmsg ai">
-        <div class="cbubble">أهلاً! أنا هنا أساعدك. اسألني عن أي حاجة — مستوى أداء المدرسين، مين ينزل إيه النهارده، أو أي حاجة في السايت 👋</div>
+        <div class="cbubble">أهلاً! اختار سؤالك من الأزرار تحت 👇</div>
       </div>
     </div>
     <div class="chat-foot">
-      <div class="chat-suggestions" id="chatSuggestions">
-        <button class="chat-sug-btn" onclick="chatAsk('مين منزلش النهارده؟')">مين منزلش النهارده؟</button>
-        <button class="chat-sug-btn" onclick="chatAsk('إيه أضعف حاجة عندنا؟')">إيه أضعف حاجة عندنا؟</button>
-        <button class="chat-sug-btn" onclick="chatAsk('اقتراح محتوى النهارده')">اقتراح المحتوى</button>
-      </div>
-      <div class="chat-input-wrap">
-        <textarea class="chat-input" id="chatInput" placeholder="اكتب سؤالك هنا…" rows="1"></textarea>
-        <button class="chat-send" id="chatSend" title="إرسال">➤</button>
-      </div>
+      <div class="chat-suggestions" id="chatSuggestions" style="display:flex !important;flex-wrap:wrap"></div>
     </div>
   </div>
   <div class="scrim" id="scrim"></div>
@@ -4074,12 +4066,13 @@ let chatHistory = [];
 let chatLoading = false;
 
 function buildContext(){
-  const todayStr = ymd(new Date());
+  const inMyScope = ownerId => ME.role==='admin' || ownerId===ME.id || descendantIds().includes(ownerId);
+  const myTeachers = TEACHERS.filter(t => inMyScope(t.owner_id));
   // بيانات المدرسين + آخر ٣٠ يوم من الـ publish log
   const cutoff = ymd(new Date(Date.now() - 30*864e5));
   const recentLogs = PUBLOG.filter(l => l.pub_date >= cutoff);
 
-  const teachersSummary = TEACHERS.map(t => {
+  const teachersSummary = myTeachers.map(t => {
     const logs = recentLogs.filter(l => l.teacher_id === t.id);
     const byType = {};
     logs.forEach(l => {
@@ -4091,13 +4084,26 @@ function buildContext(){
     return `• ${t.name}: نزّل ${logs.length} بوست آخر ٣٠ يوم | أنواع: ${Object.entries(byType).map(([k,v])=>`${k}(${v})`).join(', ')||'لا يوجد'} | اقتراح النهارده: ${sug.when} → ${sug.cat} (${sug.reason})${rep ? ` | تقييم الشهر: ${rep.total_score?.toFixed?.(1)||'—'}` : ''}`;
   }).join('\n');
 
-  const todayPosts = PUBLOG.filter(l => l.pub_date === todayStr);
-  const didPostToday = TEACHERS.filter(t => todayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
-  const didntPostToday = TEACHERS.filter(t => !todayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
+  const yesterdayStr = ymd(new Date(Date.now() - 864e5));
+  const yesterdayPosts = PUBLOG.filter(l => l.pub_date === yesterdayStr);
+  const didPostYesterday = myTeachers.filter(t => yesterdayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
+  const didntPostYesterday = myTeachers.filter(t => !yesterdayPosts.some(l => l.teacher_id === t.id)).map(t=>t.name);
 
-  // أداء الموظفين (الأعضاء) — نفس الحساب المستخدم في صفحة "التقييم والترتيب"
+  // أداء المدرسين آخر ٧ أيام (نزول + جودة) — مرتّبين من الأضعف للأقوى
+  const teacherWeekCutoff = ymd(new Date(Date.now() - 7*864e5));
+  const weeklyTeacherPerf = myTeachers.map(t => {
+    const logsWeek = PUBLOG.filter(l => l.teacher_id===t.id && l.pub_date >= teacherWeekCutoff);
+    const qualities = logsWeek.map(l => CARDS.find(c=>c.id===l.card_id)?.quality).filter(q => q!=null);
+    const avgQ = qualities.length ? (qualities.reduce((a,b)=>a+b,0)/qualities.length) : null;
+    return {name:t.name, posts:logsWeek.length, avgQ};
+  }).sort((a,b) => (a.posts-b.posts) || ((a.avgQ??0)-(b.avgQ??0)));
+  const weeklyTeacherText = weeklyTeacherPerf.map(x =>
+    `• ${x.name}: ${x.posts} بوست الأسبوع ده${x.avgQ!=null ? ` | متوسط جودة الشغل ${x.avgQ.toFixed(1)}/4` : ' | مفيش تقييم جودة لسه'}`
+  ).join('\n');
+
+  // أداء الموظفين (الأعضاء) — بس اللي في نطاقك (فريقك)، نفس الحساب المستخدم في صفحة "التقييم والترتيب"
   const ymCur = ymNow();
-  const members = PROFILES.filter(p => p.role==='member' && p.active!==false);
+  const members = myMembers().map(id => U(id));
   const employeesSummary = members.map(m => {
     const sc = memberScore(m.id, ymCur);
     const bonus = bonusUnitsFor(m.id, ymCur);
@@ -4106,19 +4112,53 @@ function buildContext(){
     return `• ${m.name}: تقييم عام ${sc.score}٪ | التزام بالنشر ${sc.postingPct??'—'}٪ | جودة الشغل ${sc.qualityPct??'—'}٪ | توازن المحتوى ${sc.balancePct??'—'}٪ | نمو ${sc.growthPct??'—'}٪ | بوستات فاتته ${sc.missed} | بونص هذا الشهر ${bonus} | خصومات ${ded>0?fmtDays(ded):'لا يوجد'}`;
   }).join('\n');
 
-  return `أنت مساعد ذكي لتيم محتوى في شركة تعليمية مصرية اسمها "A to Z". التيم بيتابع صفحات مدرسين على السوشيال ميديا ويشغّل محتواهم. بتجاوب باللهجة المصرية بشكل ودي ومختصر.
+  // بيانات المستخدم الحالي (اللي بيتكلم مع الشات دلوقتي) — تقييمه + تعليقات آخر ٧ أيام على شغله
+  const weekCutoff = ymd(new Date(Date.now() - 7*864e5));
+  const myCardIds = CARDS.filter(c => c.assignee_id === ME.id).map(c => c.id);
+  const myRecentComments = COMMENTS.filter(cm => myCardIds.includes(cm.card_id) && (cm.created_at||'').slice(0,10) >= weekCutoff);
+  const myCommentsText = myRecentComments.map(cm => {
+    const card = CARDS.find(c => c.id === cm.card_id);
+    const author = U(cm.author_id).name || 'حد في التيم';
+    return `• على بوست "${card?.title||'—'}": ${author} قال: "${cm.text}"`;
+  }).join('\n');
+  const mySc = ME.role==='member' ? memberScore(ME.id, ymCur) : null;
+  const selfSummary = mySc && mySc.score!==null
+    ? `تقييمك العام الشهر ده: ${mySc.score}٪ | التزام بالنشر: ${mySc.postingPct??'—'}٪ | جودة الشغل: ${mySc.qualityPct??'—'}٪ | توازن المحتوى: ${mySc.balancePct??'—'}٪ | نمو: ${mySc.growthPct??'—'}٪ | بوستات فاتتك: ${mySc.missed}`
+    : (ME.role==='member' ? 'مفيش بيانات كفاية لتقييمك الشهر ده لسه.' : 'التقييم الرقمي ده للأعضاء بس.');
 
-== بيانات النهارده (${todayStr}) ==
-نزّلوا النهارده: ${didPostToday.length ? didPostToday.join('، ') : 'لا أحد لحد دلوقتي'}
-لسه مانزلوش: ${didntPostToday.length ? didntPostToday.join('، ') : 'كلهم نزّلوا ✓'}
+  const showTeamSection = ME.role!=='member'; // ليدر/مانجر/أدمن بس عندهم أزرار "مين منزلش/أضعف حاجة"
+  const showPersonalSection = ME.role==='member' || ME.role==='admin'; // العضو دايمًا، والأدمن عنده كل الأزرار
+
+  const teamBlock = showTeamSection ? `
+== بيانات امبارح (${yesterdayStr}) ==
+نزّلوا امبارح: ${didPostYesterday.length ? didPostYesterday.join('، ') : 'محدش نزّل حاجة امبارح'}
+مانزلوش امبارح: ${didntPostYesterday.length ? didntPostYesterday.join('، ') : 'كلهم نزّلوا ✓'}
+
+== أداء المدرسين آخر ٧ أيام (مرتّبين من الأضعف) ==
+${weeklyTeacherText || 'لا توجد بيانات'}
+ملاحظة: "صفحته وحشة الأسبوع ده" = قلة عدد البوستات و/أو جودة شغل واطية حسب الأرقام دي.
 
 == ملخص المدرسين (آخر ٣٠ يوم) ==
 ${teachersSummary || 'لا توجد بيانات'}
 
-== أداء الموظفين (الشهر الحالي ${ymCur}) ==
+== أداء الموظفين اللي في نطاقك (الشهر الحالي ${ymCur}) ==
 ${employeesSummary || 'لا توجد بيانات'}
-ملاحظة: "أضعف موظف" أو "أفضل موظف" لازم تحكم عليه بالأرقام دي فقط (تقييم عام، التزام، جودة)، ومتخترعش أسماء أو تفاصيل مش موجودة هنا.
+ملاحظة: قارن بالأرقام دي فقط، ومتخترعش أسماء أو تفاصيل مش موجودة هنا.
+` : '';
 
+  const personalBlock = showPersonalSection ? `
+== بيانات ${ME.name} الشخصية ==
+${selfSummary}
+تعليقات آخر ٧ أيام على شغل ${ME.name}:
+${myCommentsText || 'مفيش تعليقات جديدة على شغله الأسبوع ده'}
+` : '';
+
+  return `أنت مساعد ذكي لتيم محتوى في شركة تعليمية مصرية اسمها "A to Z". التيم بيتابع صفحات مدرسين على السوشيال ميديا ويشغّل محتواهم. بتجاوب باللهجة المصرية بشكل ودي ومختصر ومختصر جدًا (رد قصير قد الإمكان، من غير حشو).
+أنت بتتكلم دلوقتي مع "${ME.name}" ودوره في التيم: ${ME.role==='admin'?'أدمن':ME.role==='manager'?'أكونت مانجر':ME.role==='lead'?'تيم ليدر':'عضو'}.
+لو حد سأل عن "امبارح" استخدم القسم المخصص له تحت مباشرة ومتقولش "معنديش بيانات" عنه.
+لو حد سأل "مين المدرسين اللي صفحاتهم وحشة الأسبوع ده" استخدم قسم "أداء المدرسين آخر ٧ أيام" وركّز على أضعف 2-3 مدرسين بالاسم مع السبب (قلة نزول أو جودة واطية).
+لو سأل "إزاي أحسّن مستواي" أو "تقييمي آخر أسبوع" استخدم قسم "بيانات ${ME.name} الشخصية" تحت وابقى محدد وعملي في نصايحك بناءً على أضعف نقطة فعلًا (التزام/جودة/توازن/نمو).
+${teamBlock}${personalBlock}
 == معلومات عن السايت ==
 السايت ده نظام إدارة محتوى داخلي للتيم. فيه: بورد بوستات (حالات: فكرة → جاري → مراجعة → جاهز → منشور)، خطة أسبوعية مقترحة للتنويع (كوميك، ريلز، ديزاين)، تقييم شهري للمدرسين، وجدول محتوى بمناسبات الشهر. البرومو والكاروسيل مش داخلين في دورة التنويع التلقائي.`;
 }
@@ -4148,14 +4188,10 @@ function chatShowTyping(show){
 
 async function chatAsk(text){
   if(chatLoading || !text.trim()) return;
-  // إخفاء الـ suggestions بعد أول سؤال
-  document.getElementById('chatSuggestions').style.display = 'none';
   chatRenderMsg('user', text);
   chatHistory.push({role:'user', content: text});
   chatLoading = true;
-  document.getElementById('chatSend').disabled = true;
-  document.getElementById('chatInput').value = '';
-  document.getElementById('chatInput').style.height = 'auto';
+  document.querySelectorAll('.chat-sug-btn').forEach(b=>b.disabled=true);
   chatShowTyping(true);
   try {
 const res = await fetch('https://yplxjertpilrqnyezdaq.supabase.co/functions/v1/chat',{
@@ -4168,30 +4204,63 @@ const res = await fetch('https://yplxjertpilrqnyezdaq.supabase.co/functions/v1/c
     });
     const rawText = await res.text();
     if(!res.ok){
+      console.error('Chat server error', res.status, rawText);
       chatShowTyping(false);
-      chatRenderMsg('ai', `⚠️ خطأ من السيرفر (كود ${res.status}):\n${rawText.slice(0,500)}`);
+      chatRenderMsg('ai', 'معلش، فيه مشكلة دلوقتي. جرب تاني بعد شوية.');
       chatLoading = false;
-      document.getElementById('chatSend').disabled = false;
       return;
     }
     let data;
     try { data = JSON.parse(rawText); } catch(parseErr){
+      console.error('Chat parse error', rawText);
       chatShowTyping(false);
-      chatRenderMsg('ai', `⚠️ الرد مش JSON صالح:\n${rawText.slice(0,500)}`);
+      chatRenderMsg('ai', 'معلش، فيه مشكلة دلوقتي. جرب تاني بعد شوية.');
       chatLoading = false;
-      document.getElementById('chatSend').disabled = false;
       return;
     }
-    const reply = data.reply || `⚠️ الرد رجع من غير حقل reply. ده اللي رجع فعليًا:\n${rawText.slice(0,500)}`;
+    const reply = data.reply || 'معلش، مش قادر أرد دلوقتي. جرب تاني.';
     chatShowTyping(false);
     chatRenderMsg('ai', reply);
     chatHistory.push({role:'assistant', content: reply});
   } catch(e){
+    console.error('Chat network error', e);
     chatShowTyping(false);
-    chatRenderMsg('ai', '⚠️ خطأ في الاتصال: ' + (e && e.message ? e.message : e));
+    chatRenderMsg('ai', 'معلش، فيه مشكلة في الاتصال. جرب تاني.');
   }
   chatLoading = false;
-  document.getElementById('chatSend').disabled = false;
+  document.querySelectorAll('.chat-sug-btn').forEach(b=>b.disabled=false);
+}
+
+const CHAT_QUESTIONS_BY_ROLE = {
+  member: [
+    'إزاي أحسّن مستواي؟',
+    'تقييمي آخر أسبوع والتعليقات اللي عليه',
+    'إيه رأيك في الحاجات دي؟',
+  ],
+  lead: [
+    'مين المدرسين اللي صفحاتهم وحشة الأسبوع ده؟',
+    'مين منزلش امبارح؟',
+    'إيه أضعف حاجة عندنا؟',
+  ],
+  manager: [
+    'مين المدرسين اللي صفحاتهم وحشة الأسبوع ده؟',
+    'مين منزلش امبارح؟',
+    'إيه أضعف حاجة عندنا؟',
+  ],
+  admin: [
+    'مين المدرسين اللي صفحاتهم وحشة الأسبوع ده؟',
+    'مين منزلش امبارح؟',
+    'إيه أضعف حاجة عندنا؟',
+    'إزاي أحسّن مستواي؟',
+    'تقييمي آخر أسبوع والتعليقات اللي عليه',
+    'إيه رأيك في الحاجات دي؟',
+  ],
+};
+function renderChatSuggestions(){
+  const box = document.getElementById('chatSuggestions');
+  if(!box || !ME) return;
+  const qs = CHAT_QUESTIONS_BY_ROLE[ME.role] || CHAT_QUESTIONS_BY_ROLE.member;
+  box.innerHTML = qs.map(q=>`<button class="chat-sug-btn" onclick="chatAsk('${q.replace(/'/g,"\\'")}')">${q}</button>`).join('');
 }
 
 function toggleChat(){
@@ -4200,22 +4269,12 @@ function toggleChat(){
   const isOpen = panel.classList.contains('show');
   panel.classList.toggle('show', !isOpen);
   fab.classList.toggle('hidden', !isOpen);
+  if(!isOpen) renderChatSuggestions();
 }
 
 // wiring الـ chat
 document.getElementById('chatFab').onclick = toggleChat;
 document.getElementById('chatClose').onclick = toggleChat;
-document.getElementById('chatSend').onclick = ()=>{
-  const input = document.getElementById('chatInput');
-  chatAsk(input.value.trim());
-};
-document.getElementById('chatInput').addEventListener('keydown', e=>{
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); chatAsk(e.target.value.trim()); }
-});
-document.getElementById('chatInput').addEventListener('input', function(){
-  this.style.height='auto';
-  this.style.height=Math.min(this.scrollHeight,100)+'px';
-});
 
 init();
 </script>
