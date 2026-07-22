@@ -257,6 +257,35 @@
   .ccal-legend .li{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-weight:700}
   .ccal-legend .li .dot{width:10px;height:10px;border-radius:3px}
 
+  /* ---- الخطة (تقويم شهري/أسبوعي عام للتيم) ---- */
+  .plan-toggle{display:flex;gap:8px;margin-bottom:18px}
+  .plan-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .plan-day{border-radius:10px;border:1px solid var(--line);background:var(--panel);padding:7px 6px;min-height:96px;max-height:150px;overflow-y:auto;cursor:pointer;transition:.13s}
+  .plan-day:hover{border-color:var(--brand-dim)}
+  .plan-day.empty{background:transparent;border-color:transparent;cursor:default}
+  .plan-day.today{border-color:var(--brand);background:var(--brand-dim)}
+  .plan-day .pd-num{font-size:11px;font-weight:800;color:var(--muted);margin-bottom:5px}
+  .plan-day.today .pd-num{color:var(--brand)}
+  .plan-pill{background:var(--raised);border-inline-start:3px solid var(--line2);border-radius:6px;padding:3px 6px;font-size:10.5px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.13s}
+  .plan-pill:hover{background:var(--raised2)}
+  .plan-sugg{border:1px dashed var(--line2);border-radius:6px;padding:3px 6px;font-size:10px;font-weight:700;margin-bottom:4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.13s}
+  .plan-sugg:hover{border-color:var(--brand);color:var(--brand)}
+  .plan-add{font-size:16px;color:var(--faint);text-align:center;padding-top:4px}
+  .planw-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-items:start}
+  .planw-col{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px;min-height:160px}
+  .planw-col.today{border-color:var(--brand)}
+  .planw-head{display:flex;flex-direction:column;align-items:center;gap:1px;padding-bottom:9px;margin-bottom:8px;border-bottom:1px solid var(--line);cursor:pointer}
+  .planw-head .l{font-size:10.5px;color:var(--muted);font-weight:800}
+  .planw-head .n{font-size:15px;font-weight:900}
+  .planw-col.today .planw-head .n{color:var(--brand)}
+  .planw-item{background:var(--raised);border:1px solid var(--line2);border-inline-start:3px solid var(--line2);border-radius:8px;padding:7px 8px;margin-bottom:7px;cursor:pointer;transition:.13s}
+  .planw-item:hover{border-color:var(--brand);transform:translateY(-1px)}
+  .planw-item.sugg{background:transparent;border-style:dashed;border-inline-start-style:dashed;border-inline-start-color:var(--line2)}
+  .planw-item.sugg:hover{border-color:var(--brand)}
+  .planw-item .t{font-size:12px;font-weight:700;line-height:1.35;margin-bottom:4px}
+  .planw-item .s{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .planw-empty{font-size:10.5px;color:var(--faint);text-align:center;padding:10px 0}
+
 
   /* leaderboard + tracking */
   .miss-badge{font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px;background:var(--danger-dim);color:var(--danger);margin-inline-start:6px}
@@ -451,6 +480,23 @@
   }
   @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}.topbar .btn.ghost{display:none}}
 
+  /* ---- Smart Planner Banner ---- */
+  .psmart-banner{border-radius:var(--radius-s);padding:10px 12px;margin-bottom:8px;background:var(--brand-dim);border:1px solid #C6D6EE}
+  .psmart-banner.warn{background:#FFF3E0;border-color:#F0B557}
+  .psmart-banner.ok{background:#E8F5EE;border-color:#BADECC;color:#1d8a52;font-size:12.5px;font-weight:700;text-align:center;padding:8px}
+  .psb-row{display:flex;align-items:flex-start;gap:8px}
+  .psb-ico{font-size:16px;flex:none;margin-top:1px}
+  .psb-body{flex:1;min-width:0}
+  .psb-title{font-size:13px;font-weight:700;color:var(--txt);margin-bottom:3px}
+  .psb-sub{font-size:11.5px;color:var(--muted)}
+  .psb-defer-hint{font-size:11.5px;color:var(--doing);font-weight:700;margin-top:5px}
+  .psb-order{width:18px;height:18px;border-radius:50%;background:var(--brand);color:#fff;font-size:10px;font-weight:900;display:grid;place-items:center;flex:none;margin-top:2px}
+  .psb-defer-btn{font-size:11px;font-weight:800;color:var(--doing);background:none;border:1px solid var(--doing);border-radius:6px;padding:2px 7px;cursor:pointer;flex:none;transition:.13s;white-space:nowrap}
+  .psb-defer-btn:hover{background:var(--doing);color:#fff}
+  .planw-item-top{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px}
+  .planw-done{opacity:.55}
+  .planw-done .t{text-decoration:line-through}
+
   #tourBackdrop{position:fixed;inset:0;background:rgba(16,24,41,.62);z-index:80;display:none}
   #tourBackdrop.show{display:block}
   .tour-spot{position:fixed;z-index:95;border-radius:12px;box-shadow:0 0 0 4px #E0922A,0 0 0 9999px rgba(16,24,41,.62);transition:.25s;pointer-events:none}
@@ -535,7 +581,7 @@
     <aside class="side" id="side">
       <div class="nav-group-label">المساحة</div>
       <button class="nav-item active" data-view="board"><span class="ico">▦</span> البورد <span class="count" id="nBoard"></span></button>
-      <button class="nav-item" data-view="agenda"><span class="ico">📅</span> الأجندة</button>
+      <button class="nav-item" data-view="planner"><span class="ico">🗓️</span> الخطة</button>
       <button class="nav-item" data-view="team"><span class="ico">⚑</span> الفريق <span class="count" id="nTeam"></span></button>
       <button class="nav-item" data-view="teachers"><span class="ico">🎓</span> المدرّسين</button>
       <button class="nav-item" data-view="manage" id="navManage"><span class="ico">⚙</span> إدارة الفريق</button>
@@ -710,20 +756,40 @@ function nextCat(cat){
   return PLAN_CATS[(PLAN_CATS.indexOf(cat)+1)%PLAN_CATS.length];
 }
 // ترشيح تنويع: بيبص على آخر نوع فعلي (من PLAN_CATS) ويرشّح التالي
+// يختار النوع التالي بمراعاة حدود الالتزام الأسبوعي: يدّي أولوية لأي نوع لسه ناقص حده الأدنى،
+// وبيتخطى أي نوع وصل حده الأقصى بدل ما يقترحه بشكل عمياني في الدورة
+function pickCompliantNext(teacherId, last){
+  const ws=ymd(weekStart()), we=ymd(weekEnd());
+  const counts=teacherCatCounts(teacherId, ws, we);
+  const overMax = cat => { const r=COMPLIANCE_RULES.find(x=>x.cat===cat&&x.type==='max'); return r && (counts[cat]||0) >= r.n; };
+  const underMin = cat => { const r=COMPLIANCE_RULES.find(x=>x.cat===cat&&x.type==='min'); return r && (counts[cat]||0) < r.n; };
+  const needed = PLAN_CATS.filter(c=>underMin(c) && c!==last);
+  if(needed.length) return needed[0];
+  let next=nextCat(last), guard=0;
+  while(overMax(next) && guard<PLAN_CATS.length){ next=nextCat(next); guard++; }
+  return next;
+}
 function suggestForTeacher(teacherId){
   const todayStr=ymd(new Date());
   const postedToday=PUBLOG.filter(l=>l.teacher_id===teacherId&&l.pub_date===todayStr)
     .map(l=>(CARDS.find(x=>x.id===l.card_id)||{}).category).filter(Boolean);
   const planPostedToday=postedToday.find(c=>PLAN_CATS.includes(c));
+  let when, cat, reason;
   if(planPostedToday){
     const last=planPostedToday;
-    const next=nextCat(last);
-    return {when:'بكرة', cat:next, reason:`النهارده نزل ${last} — بكرة نوّع بـ${next}`};
+    cat=pickCompliantNext(teacherId, last);
+    when='بكرة'; reason=`النهارده نزل ${last} — بكرة نوّع بـ${cat}`;
+  } else {
+    // لو نزل برومو النهارده بس — لسه بنقترح نفس النوع للنهارده
+    const last=lastCategoryBefore(teacherId, todayStr);
+    cat=pickCompliantNext(teacherId, last);
+    when='النهارده'; reason= last?`آخر حاجة نزلت كانت ${last} — نوّع بـ${cat}`:`لسه مفيش حاجة اتنزلت — ابدأ بـ${cat}`;
   }
-  // لو نزل برومو النهارده بس — لسه بنقترح نفس النوع للنهارده
-  const last=lastCategoryBefore(teacherId, todayStr);
-  const next=nextCat(last);
-  return {when:'النهارده', cat:next, reason: last?`آخر حاجة نزلت كانت ${last} — نوّع بـ${next}`:`لسه مفيش حاجة اتنزلت — ابدأ بـ${next}`};
+  // مناسبة قريبة؟ (النهارده أو بكرة) — ملاحظة بس، مايغيّرش النوع لأن كاروسيل/برومو مش داخلين في دورة التنويع
+  const occDate = when==='بكرة' ? addDays(new Date(),1) : new Date();
+  const occ = findOccasion(occDate);
+  if(occ) reason += ` (📌 فيه مناسبة ${when==='بكرة'?'بكرة':'النهارده'}: ${occ} — فكّر تضيف كاروسيل/برومو يواكبها)`;
+  return {when, cat, reason};
 }
 // خطة الأسبوع (سبت→جمعة):
 // - الأيام اللي فاتت: بتوري اللي فعلاً اتنزل
@@ -787,16 +853,36 @@ function occasionBanner(){
   const when=occToday?'النهارده':'بكرة', occ=occToday||occTomorrow;
   return `<div class="suggest-pill occ" title="فرصة تواكب المناسبة"><span class="pcat">🎉 ${when}</span><span class="psep">·</span><span class="pname">${esc(occ)}</span></div>`;
 }
+// أضعف تصنيف لمدرّس معيّن على أساس تقييم الجودة آخر ٣ أسابيع (لازم بوستين على الأقل عشان تبقى إشارة حقيقية)
+function teacherWeakCategory(teacherId){
+  const since=ymd(addDays(new Date(),-21));
+  const byCat={};
+  PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=since).forEach(l=>{
+    const card=CARDS.find(x=>x.id===l.card_id);
+    if(!card||!card.category||card.quality==null) return;
+    (byCat[card.category]=byCat[card.category]||[]).push(card.quality);
+  });
+  let weakest=null;
+  Object.keys(byCat).forEach(cat=>{
+    const arr=byCat[cat];
+    if(arr.length<2) return;
+    const avg=arr.reduce((a,b)=>a+b,0)/arr.length;
+    if(avg<=2 && (!weakest||avg<weakest.avg)) weakest={cat,avg,n:arr.length};
+  });
+  return weakest;
+}
 // pill مدرّس: اسمه + "النهارده:" + النوع المقترح + زرار +
 function teacherSuggestRow(t){
   const sug=suggestForTeacher(t.id);
+  const weak=teacherWeakCategory(t.id);
+  const weakBadge = weak ? `<span class="tag plat" style="color:var(--danger);border-color:var(--danger);margin-inline-start:6px" title="متوسط تقييم ${escAttr(weak.cat)} آخر ٣ أسابيع واطي (${weak.n} بوستات)">⚠️ ${esc(weak.cat)} محتاج تحسين</span>` : '';
   return `<div class="suggest-pill" title="💡 اقتراح: ${escAttr(sug.reason)}" onclick="openCard(null,'post','${escAttr(sug.cat)}',null,'${t.id}')">
     <span class="pname">${esc(t.name)}</span>
     <span class="psep">·</span>
     <span class="pwhen">${esc(sug.when)}:</span>
     <span class="pcat">${esc(sug.cat)}</span>
     <span class="pbtn">＋</span>
-  </div>`;
+  </div>${weakBadge}`;
 }
 // ===== خطة الأسبوع section =====
 function weekPlanSection(myTeachers){
@@ -1038,6 +1124,8 @@ const TR_CRITERIA=[{k:'reply',name:'سرعة الرد',ico:'⚡'},{k:'satis',nam
 const TR_OPTS=[{v:3,name:'كويس'},{v:2,name:'مقبول'},{v:1,name:'سيء'}];
 function getTReview(tid,ym){return TREVIEWS.find(r=>r.teacher_id===tid&&r.ym===ym);}
 let view='board', scopeTeacher=null, filterCat=null, signUpMode=false, linkTeacher=null, detailId=null, boardKind='post', boardScope='me';
+let plannerMonth=null, plannerMode='month', plannerWeekOffset=0, plannerTeacherFilter=null;
+let expandedCols=new Set(); // أعمدة "اتنشر/خلص" اللي المستخدم فتحها بالكامل بدل ما تتقفل تلقائي
 
 /* ---------- Auth ---------- */
 async function init(){
@@ -1649,7 +1737,7 @@ function render(){
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   const main=document.getElementById('main');
   if(view==='board')main.innerHTML=boardView();
-  else if(view==='agenda')main.innerHTML=agendaView();
+  else if(view==='planner')main.innerHTML=plannerView();
   else if(view==='team')main.innerHTML=teamView();
   else if(view==='teachers')main.innerHTML=teachersPage();
   else if(view==='detail')main.innerHTML=detailView();
@@ -1701,6 +1789,12 @@ function statStrip(cs){
     ${S('جاهز / اتنشر',done,'var(--ready)')}${S('متأخر',late,late?'var(--danger)':'var(--faint)')}</div>`;
 }
 function olderBtn(){ return loadedAll?'':`<div style="text-align:center;margin-top:20px"><button class="btn ghost" style="height:38px;padding:0 18px" onclick="loadOlderData(this)">⤓ حمّل الشغل الأقدم (قبل ٣ شهور)</button></div>`; }
+// أعمدة "اتنشر" و"خلص" بتتراكم مع الوقت وممكن توصل مئات الكروت — نعرض آخر عدد محدود بس افتراضيًا
+const COL_PILEUP_CAP = 20;
+window.toggleColExpand = function(statusId){
+  if(expandedCols.has(statusId)) expandedCols.delete(statusId); else expandedCols.add(statusId);
+  render();
+};
 function boardView(){
   const all=visibleCards();
   const isTask=boardKind==='task';
@@ -1711,9 +1805,20 @@ function boardView(){
     hint=`<div class="lt-empty" style="margin-bottom:18px">لسه مفيش مدرّسين. ${ME.role!=='member'?'دوس «＋ مدرّس» فوق عشان تضيف أول مدرّس وتحدد المسؤول عنه.':'كلّم التيم ليدر أو الأكونت مانجر بتاعك يضيفلك مدرّسين.'}</div>`;
   }
   const statuses=isTask?TASK_STATUSES:STATUSES;
-  const cols=statuses.map(s=>{const items=cs.filter(c=>c.status===s.id);
-    return `<div class="col" data-status="${s.id}"><div class="col-head"><span class="dot" style="background:${s.color}"></span>${s.name}<span class="num">${items.length}</span></div>
-      ${items.map(cardHTML).join('')||`<div style="color:var(--faint);font-size:12px;text-align:center;padding:14px 0">—</div>`}</div>`;}).join('');
+  const cols=statuses.map(s=>{
+    const allItems=cs.filter(c=>c.status===s.id); // ترتيبها أصلاً الأحدث أولاً (CARDS متحمّلة كده)
+    const isPileup = s.id==='published' || s.id==='done';
+    let items=allItems, footer='';
+    if(isPileup && allItems.length>COL_PILEUP_CAP){
+      if(expandedCols.has(s.id)){
+        footer=`<div style="text-align:center;margin-top:8px"><button class="btn ghost" style="height:32px;padding:0 14px;font-size:12px" onclick="event.stopPropagation();toggleColExpand('${s.id}')">⤒ اقفل تاني</button></div>`;
+      } else {
+        items=allItems.slice(0,COL_PILEUP_CAP);
+        footer=`<div style="text-align:center;margin-top:8px"><button class="btn ghost" style="height:32px;padding:0 14px;font-size:12px" onclick="event.stopPropagation();toggleColExpand('${s.id}')">⤓ شوف الباقي (${allItems.length-COL_PILEUP_CAP})</button></div>`;
+      }
+    }
+    return `<div class="col" data-status="${s.id}"><div class="col-head"><span class="dot" style="background:${s.color}"></span>${s.name}<span class="num">${allItems.length}</span></div>
+      ${items.map(cardHTML).join('')||`<div style="color:var(--faint);font-size:12px;text-align:center;padding:14px 0">—</div>`}${footer}</div>`;}).join('');
   const chip=(l,v)=>`<button class="chip ${filterCat===v?'on':''}" data-cat="${v??''}">${l}</button>`;
   const tabs=`<div class="seg-tabs" style="margin-bottom:16px">
       <button class="${boardKind==='post'?'on':''}" onclick="boardKind='post';filterCat=null;render()">📱 البوستات</button>
@@ -1874,53 +1979,256 @@ function wireBoard(){
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{filterCat=b.dataset.cat||null;render();});
 }
 window.openPersonDetail=function(id){detailId=id;view='detail';render();};
-let agendaScope='me';
-function agendaView(){
-  const canTeam = ME.role!=='member';
-  const ids = (agendaScope==='team'&&canTeam) ? scopeIds() : [ME.id];
-  // المهام النشطة (مش الخلصانة) المسندة للأشخاص دول
-  let items=CARDS.filter(c=>ids.includes(c.assignee_id));
-  items=items.filter(c=>(c.kind==='task')?c.status!=='done':c.status!=='published');
-  const today=new Date(); today.setHours(0,0,0,0);
-  const tomorrow=new Date(today); tomorrow.setDate(today.getDate()+1);
-  const weekEnd=new Date(today); weekEnd.setDate(today.getDate()+7);
-  const ymdT=ymd(today), ymdTom=ymd(tomorrow);
-  const buckets={late:[],today:[],tom:[],week:[],later:[],none:[]};
-  items.forEach(c=>{
-    if(!c.due){buckets.none.push(c);return;}
-    if(c.due<ymdT)buckets.late.push(c);
-    else if(c.due===ymdT)buckets.today.push(c);
-    else if(c.due===ymdTom)buckets.tom.push(c);
-    else if(c.due<=ymd(weekEnd))buckets.week.push(c);
-    else buckets.later.push(c);
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+// بوستات وتاسكات مدرّسينك إنت بس (+ تاسكاتك الشخصية اللي من غير مدرّس محدّد) — مش شغل التيم كله
+function plannerItems(){
+  const myTeacherIds=new Set(TEACHERS.filter(t=>t.owner_id===ME.id).map(t=>t.id));
+  let items=CARDS.filter(c=>{
+    if(!c.due) return false;
+    if(c.kind==='task'){
+      const tids=c.teacher_ids||[];
+      return tids.length ? tids.some(id=>myTeacherIds.has(id)) : c.assignee_id===ME.id;
+    }
+    return myTeacherIds.has(c.teacher_id);
   });
-  // الترتيب: المستعجل الأول، بعده المهم، بعده العادي — وجوه كل مجموعة اللي وقته أطول الأول، وبعدين الميعاد
-  const sortf=(a,b)=>{
-    const pa=prio(a.priority).rank, pb=prio(b.priority).rank;
-    if(pa!==pb)return pa-pb;
-    const ea=a.effort||0, eb=b.effort||0;
-    if(ea!==eb)return eb-ea;            // الأطول الأول
-    return (a.due||'9').localeCompare(b.due||'9');
-  };
-  Object.values(buckets).forEach(arr=>arr.sort(sortf));
-  const row=c=>{
-    const a=U(c.assignee_id), isTask=c.kind==='task', t=isTask?null:T(c.teacher_id), p=prio(c.priority);
-    const stName=(isTask?TASK_STATUSES:STATUSES).find(s=>s.id===c.status)?.name||'';
-    return `<div class="rank-row" style="cursor:pointer;padding:11px 16px;${p.id!=='normal'?`border-inline-start:3px solid ${p.id==='urgent'?'var(--danger)':'#E0A93B'}`:''}" onclick="openCard('${c.id}')">
-      <span style="font-size:18px;flex:none">${cardIcon(c)}</span>
-      <div class="rank-main"><div class="nm" style="font-size:14px">${p.id!=='normal'?p.ico+' ':''}${esc(c.title)}</div>
-        <div class="sub">${t?`<span>● ${t.name}</span>`:''}<span>👤 ${a.name}</span>${c.effort?`<span>⏱ ${effortName(c.effort)}</span>`:''}<span>${stName}</span></div></div>
-      ${c.due?`<span class="due ${isLate(c)?'late':''}" style="flex:none">${isLate(c)?'⚠':'◔'} ${dueLabel(c.due)}</span>`:'<span style="color:var(--faint);font-size:11px">بدون ميعاد</span>'}</div>`;
-  };
-  const section=(title,arr,color,urgent)=>arr.length?`<div class="nav-group-label" style="color:${color||'var(--muted)'};margin:18px 4px 10px;font-size:13px;font-weight:800">${title} (${arr.length})</div>${arr.map(row).join('')}`:'';
-  const toggle = canTeam?`<div class="seg-tabs" style="margin-bottom:18px">
-      <button class="${agendaScope==='me'?'on':''}" onclick="agendaScope='me';render()">شغلي أنا</button>
-      <button class="${agendaScope==='team'?'on':''}" onclick="agendaScope='team';render()">شغل الفريق</button></div>`:'';
-  let body=section('⚠ متأخر',buckets.late,'var(--danger)')+section('النهارده',buckets.today,'var(--brand)')
-    +section('بكرة',buckets.tom)+section('الأسبوع ده',buckets.week)+section('لاحقًا',buckets.later)+section('من غير ميعاد',buckets.none);
-  if(!body) body=`<div class="empty"><div class="big">📅</div>مفيش شغل مفتوح${agendaScope==='team'?' للفريق':''} حاليًا. كله متسلّم 👏</div>`;
-  return `<div class="page-head"><div><div class="page-title">الأجندة</div><div class="page-sub">شغلك مرتّب بالأيام — النهارده، بكرة، وبعدين</div></div></div>${toggle}${body}${olderBtn()}`;
+  if(plannerTeacherFilter){
+    items=items.filter(c=>c.kind==='task' ? (c.teacher_ids||[]).includes(plannerTeacherFilter) : c.teacher_id===plannerTeacherFilter);
+  }
+  return items;
 }
+// خلص/اتنشر = أخضر دايمًا، عشان بصّة واحدة تعرف إيه اللي اتقفل
+function plannerStatusColor(kind,status){
+  if(status==='published'||status==='done') return 'var(--ready)';
+  const st=(kind==='task'?TASK_STATUSES:STATUSES).find(s=>s.id===status);
+  return st?st.color:'var(--line2)';
+}
+// اسم المدرّس/المدرّسين بتوع الكارت (بوست = مدرّس واحد، تاسك ممكن كذا مدرّس)
+function plannerTeacherLabel(c){
+  if(c.kind==='task'){
+    const ids=c.teacher_ids||[];
+    return ids.length ? ids.map(id=>T(id).name).join('، ') : null;
+  }
+  return c.teacher_id ? T(c.teacher_id).name : null;
+}
+function plannerRowMeta(c){
+  const a=U(c.assignee_id), isTask=c.kind==='task';
+  const st=(isTask?TASK_STATUSES:STATUSES).find(s=>s.id===c.status);
+  return {a,isTask,tLabel:plannerTeacherLabel(c),stName:st?st.name:'',stColor:plannerStatusColor(c.kind,c.status)};
+}
+// زرار إضافة بميعاد ومدرّس متعبّيين تلقائي (حسب الفلتر الحالي)
+function plannerAddOnclick(ds){
+  const pt=plannerTeacherFilter?`'${plannerTeacherFilter}'`:'null';
+  const pd=ds?`'${ds}'`:'null';
+  return `openCard(null,'post',null,null,${pt},${pd})`;
+}
+// ===== الخطة: تقويم عام للتيم — شهري وأسبوعي، مع اقتراحات للأيام الجايه بناءً على دورة التنويع =====
+// الاقتراحات بتبان بس لمدرّسينك إنت (اللي ماسكهم أنت شخصيًا) — مش كل مدرّسين التيم
+function plannerSuggestContext(){
+  let myTeachers=TEACHERS.filter(t=>t.owner_id===ME.id);
+  if(plannerTeacherFilter) myTeachers=myTeachers.filter(t=>t.id===plannerTeacherFilter);
+  const teacherPlanByDate={};
+  myTeachers.forEach(t=>{
+    const map={};
+    weeklyPlan(t.id).forEach(x=>{map[x.date]=x;});
+    teacherPlanByDate[t.id]=map;
+  });
+  return {myTeachers, teacherPlanByDate, todayStr:ymd(new Date())};
+}
+// اقتراح تنويع ليوم معيّن — بس للمدرّسين اللي لسه مالهمش حاجة متجدولة في اليوم ده
+function plannerSuggestionsFor(ds, dayItems, ctx){
+  if(ds<=ctx.todayStr || !ctx.myTeachers.length) return [];
+  const covered=new Set(dayItems.filter(c=>c.kind==='post'&&c.teacher_id).map(c=>c.teacher_id));
+  const occ=findOccasion(new Date(ds+'T00:00:00'));
+  return ctx.myTeachers.filter(t=>!covered.has(t.id)).map(t=>{
+    const x=(ctx.teacherPlanByDate[t.id]||{})[ds];
+    return (x && !x.rest && x.cat) ? {teacher:t, cat:x.cat, occ} : null;
+  }).filter(Boolean);
+}
+function plannerView(){
+  const items=plannerItems();
+  const byDate={};
+  items.forEach(c=>{(byDate[c.due]=byDate[c.due]||[]).push(c);});
+  const ctx=plannerSuggestContext();
+  const toggle=`<div class="plan-toggle seg-tabs">
+    <button class="${plannerMode==='month'?'on':''}" onclick="plannerMode='month';render()">شهري</button>
+    <button class="${plannerMode==='week'?'on':''}" onclick="plannerMode='week';render()">أسبوعي</button></div>`;
+  const filterTeachers=TEACHERS.filter(t=>t.owner_id===ME.id).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const filterUI = filterTeachers.length>1 ? `<div class="search" style="max-width:220px;height:40px">
+      <span style="color:var(--faint)">🎓</span>
+      <select id="plannerTFilter" style="background:none;border:none;color:var(--txt);width:100%;outline:none" onchange="plannerTeacherFilter=this.value||null;render()">
+        <option value="">كل مدرّسينك</option>
+        ${filterTeachers.map(t=>`<option value="${t.id}" ${plannerTeacherFilter===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}
+      </select></div>` : '';
+  const head=`<div class="page-head"><div><div class="page-title">الخطة</div>
+    <div class="page-sub">خطة بوستات وتاسكات مدرّسينك بميعاد تسليم — شهري وأسبوعي، مع اقتراحات للأيام الجايه</div></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${filterUI}<button class="btn primary" onclick="${plannerAddOnclick(null)}">+ إضافة</button></div></div>`;
+  const occBanner = occasionBanner() ? `<div class="suggest-list">${occasionBanner()}</div>` : '';
+  const body = plannerMode==='week' ? plannerWeekGrid(byDate,ctx) : plannerMonthGrid(byDate,ctx);
+  return head+occBanner+toggle+body;
+}
+function plannerMonthGrid(byDate,ctx){
+  if(!plannerMonth) plannerMonth=ymNow();
+  const [yr,mo]=plannerMonth.split('-').map(Number);
+  const monthName=new Date(yr,mo-1,1).toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
+  const firstDay=new Date(yr,mo-1,1), lastDay=new Date(yr,mo,0);
+  const todayStr=ymd(new Date());
+  const dayLabels=['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+  const heads=dayLabels.map(l=>`<div class="ccal-lbl">${l}</div>`).join('');
+  let cells='';
+  for(let i=0;i<firstDay.getDay();i++) cells+=`<div class="plan-day empty"></div>`;
+  for(let d=1;d<=lastDay.getDate();d++){
+    const ds=`${plannerMonth}-${String(d).padStart(2,'0')}`;
+    const dayItems=byDate[ds]||[];
+    const isToday=ds===todayStr;
+    const pills=dayItems.map(c=>{
+      const m=plannerRowMeta(c);
+      const tip=escAttr(c.title+(m.tLabel?' — '+m.tLabel:''));
+      return `<div class="plan-pill" style="border-inline-start-color:${m.stColor}" title="${tip}" onclick="event.stopPropagation();openCard('${c.id}')">${cardIcon(c)} ${esc(c.title)}${m.tLabel?` <span style="color:var(--faint)">· ${esc(m.tLabel)}</span>`:''}</div>`;
+    }).join('');
+    const suggs=plannerSuggestionsFor(ds,dayItems,ctx).map(s=>
+      `<div class="plan-sugg" title="${s.occ?'📌 مناسبة: '+escAttr(s.occ)+' — ':''}اقتراح تنويع لـ${escAttr(s.teacher.name)} بناءً على آخر حاجة نزلتله" onclick="event.stopPropagation();openCard(null,'post','${escAttr(s.cat)}',null,'${s.teacher.id}','${ds}')">💡 ${esc(s.teacher.name)}: ${esc(s.cat)}${s.occ?' 🎉':''}</div>`
+    ).join('');
+    cells+=`<div class="plan-day${isToday?' today':''}" onclick="${plannerAddOnclick(ds)}">
+      <div class="pd-num">${d}</div>${pills}${suggs}${!dayItems.length&&!suggs?'<div class="plan-add">+</div>':''}
+    </div>`;
+  }
+  const prevBtn=`<button onclick="plannerMonth=shiftYm(plannerMonth||'${ymNow()}',-1);render()">&#8250;</button>`;
+  const nextBtn=`<button onclick="plannerMonth=shiftYm(plannerMonth||'${ymNow()}',1);render()">&#8249;</button>`;
+  return `<div class="month-nav">${prevBtn}<span class="mname">${monthName}</span>${nextBtn}</div>
+    <div class="ccal-grid">${heads}${cells}</div>
+    <div class="ccal-legend">
+      <div class="li"><span class="dot" style="background:var(--ready)"></span> خلص / اتنشر</div>
+      <div class="li"><span class="dot" style="background:var(--doing)"></span> قيد العمل</div>
+      <div class="li"><span class="dot" style="background:var(--review)"></span> محتاج مراجعة</div>
+      <div class="li"><span class="dot" style="background:var(--idea)"></span> فكرة / مطلوب</div>
+    </div>`;
+}
+/* ===== منطق المساعد الذكي للخطة الأسبوعية ===== */
+const PLANNER_MAX_EFFORT = 300; // 5 ساعات = طاقة يوم معقولة بالدقايق
+// ترتيب كروت اليوم: الأولوية أولاً، وجوه نفس الأولوية تبديل صغير↔كبير *نسبي* (مش حد أقصى ثابت)
+// بيرتب تصاعديًا حسب المدة وبعدين ياخد بالتبادل من الطرفين: الأصغر، الأكبر، تاني أصغر، تاني أكبر...
+// كده لو كل التاسكات صغيرة (ربع/نص ساعة) برضو بيتحسب التبديل صح على حسب حجمهم النسبي لبعض
+function planOrderItems(items){
+  const groups={};
+  items.forEach(c=>{ const r=prio(c.priority).rank; (groups[r]=groups[r]||[]).push(c); });
+  const ranks=Object.keys(groups).map(Number).sort((a,b)=>a-b);
+  let ordered=[];
+  ranks.forEach(r=>{
+    const g=groups[r].slice().sort((a,b)=>(a.effort||60)-(b.effort||60)); // تصاعدي
+    let lo=0, hi=g.length-1, takeLow=true;
+    while(lo<=hi){
+      if(takeLow){ ordered.push(g[lo]); lo++; }
+      else { ordered.push(g[hi]); hi--; }
+      takeLow=!takeLow;
+    }
+  });
+  return ordered;
+}
+function plannerSmartBanner(items){
+  // items = كروت النهارده المرتبة بالأولوية (بدون اللي خلصوا)
+  const pending = items.filter(c=>c.status!=='published'&&c.status!=='done'&&c.status!=='ready');
+  if(!pending.length) return `<div class="psmart-banner ok">🎉 مفيش حاجات معلقة النهارده!</div>`;
+
+  // احسب الوقت المتوقع
+  const totalMins = pending.reduce((s,c)=>s+(c.effort||60),0);
+  const overloaded = totalMins > PLANNER_MAX_EFFORT;
+
+  // أهم حاجة = الأولى بعد الترتيب
+  const first = pending[0];
+  const firstName = first.title;
+  const firstPrio = prio(first.priority);
+
+  // كم حاجة ممكن ترحيل؟
+  const deferCandidates = pending.filter(c=>prio(c.priority).rank>=2); // normal فقط
+  const hasDefer = overloaded && deferCandidates.length>0;
+
+  const hrsText = totalMins>=60
+    ? `${Math.floor(totalMins/60)} س${totalMins%60?' '+totalMins%60+' د':''}`
+    : `${totalMins} د`;
+
+  return `<div class="psmart-banner${overloaded?' warn':''}">
+    <div class="psb-row">
+      <span class="psb-ico">${overloaded?'⚠️':'🎯'}</span>
+      <div class="psb-body">
+        <div class="psb-title">ابدأ بـ <b>${esc(firstName)}</b> ${firstPrio.ico}</div>
+        <div class="psb-sub">
+          ${pending.length} حاجة · ${hrsText} متوقعة
+          ${overloaded?` · <span style="color:var(--danger);font-weight:800">اليوم مكدّس!</span>`:''}
+        </div>
+        ${hasDefer?`<div class="psb-defer-hint">💡 ارحّل الحاجات العادية لبكره وخلّص المهم الأول</div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function plannerWeekGrid(byDate,ctx){
+  const base=addDays(new Date(), plannerWeekOffset*7);
+  const ws=weekStart(base), we=weekEnd(base);
+  const fmt=d=>d.toLocaleDateString('ar-EG',{day:'numeric',month:'short'});
+  const dayLabels=['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+  const todayStr=ymd(new Date());
+  // حضّر تاريخ بكره عشان نحتاجه في ترحيل كروت النهارده
+  const tomorrowStr=ymd(addDays(new Date(),1));
+  let d=new Date(ws), cols='';
+  while(d<=we){
+    const ds=ymd(d);
+    const dayItems=planOrderItems(byDate[ds]||[]);
+    const isToday=ds===todayStr;
+
+    const itemsHtml=dayItems.map((c,idx)=>{
+      const m=plannerRowMeta(c);
+      const isDone = c.status==='published'||c.status==='done'||c.status==='ready';
+      // رقم الترتيب (بس للكروت المعلقة في النهارده)
+      const orderBadge = isToday && !isDone
+        ? `<span class="psb-order">${dayItems.filter((x,i)=>i<idx&&x.status!=='published'&&x.status!=='done'&&x.status!=='ready').length+1}</span>`
+        : '';
+      // زرار الترحيل: بس للنهارده، وبس الكروت اللي مش خلصت، وبس اللي عندها due date
+      const deferBtn = isToday && !isDone && c.due
+        ? `<button class="psb-defer-btn" title="ارحّل لبكره" onclick="event.stopPropagation();plannerDefer('${c.id}','${tomorrowStr}')">↪ بكره</button>`
+        : '';
+      return `<div class="planw-item${isDone?' planw-done':''}" style="border-inline-start-color:${m.stColor}" onclick="openCard('${c.id}')">
+        <div class="planw-item-top">
+          ${orderBadge}
+          <div class="t" style="flex:1">${cardIcon(c)} ${esc(c.title)}</div>
+          ${deferBtn}
+        </div>
+        <div class="s">${m.tLabel?`<span>● ${esc(m.tLabel)}</span>`:''}<span>👤 ${esc(m.a.name)}</span><span>${m.stName}</span>${c.effort?`<span>⏱ ${effortName(c.effort)}</span>`:''}</div>
+      </div>`;
+    }).join('');
+
+    const suggsHtml=plannerSuggestionsFor(ds,dayItems,ctx).map(s=>
+      `<div class="planw-item sugg" title="اقتراح تنويع بناءً على آخر حاجة نزلتله" onclick="openCard(null,'post','${escAttr(s.cat)}',null,'${s.teacher.id}','${ds}')">
+        <div class="t">💡 اقتراح: ${esc(s.cat)}${s.occ?` <span style="color:var(--danger)">🎉 ${esc(s.occ)}</span>`:''}</div>
+        <div class="s"><span>🎓 ${esc(s.teacher.name)}</span></div>
+      </div>`
+    ).join('');
+
+    // البانر الذكي بيبان بس في عمود النهارده
+    const smartBanner = isToday ? plannerSmartBanner(dayItems) : '';
+    const body = (itemsHtml+suggsHtml) || `<div class="planw-empty">مفيش حاجة</div>`;
+    cols+=`<div class="planw-col${isToday?' today':''}">
+      <div class="planw-head" onclick="${plannerAddOnclick(ds)}"><span class="l">${dayLabels[d.getDay()]}</span><span class="n">${d.getDate()}</span></div>
+      ${smartBanner}${body}
+    </div>`;
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  const prevBtn=`<button onclick="plannerWeekOffset--;render()">&#8250;</button>`;
+  const nextBtn=`<button onclick="plannerWeekOffset++;render()">&#8249;</button>`;
+  const todayBtn = plannerWeekOffset!==0 ? `<button class="btn ghost" style="height:32px;padding:0 12px;flex:none" onclick="plannerWeekOffset=0;render()">النهارده</button>` : '';
+  return `<div class="month-nav">${prevBtn}<span class="mname">${fmt(ws)} — ${fmt(we)}</span>${nextBtn}${todayBtn}</div>
+    <div class="planw-grid">${cols}</div>`;
+}
+
+/* ===== ترحيل كارت من يوم لتاني ===== */
+window.plannerDefer = async function(cardId, newDue){
+  const c = CARDS.find(x=>x.id===cardId);
+  if(!c) return;
+  const {error} = await sb.from('cards').update({due: newDue}).eq('id', cardId);
+  if(error) return toast(error.message, true);
+  c.due = newDue;
+  toast('اترحّل لبكره ✓');
+  render();
+};
 function teacherStatChip(t){
   const posts=teacherPosts(t.id), missed=teacherMissInfo(t.id).counted;
   return `<div class="rank-row" style="cursor:pointer" onclick="scopeTeacher='${t.id}';boardKind='post';view='board';render()">
@@ -3216,8 +3524,7 @@ const GUIDE=[
   {ico:'✅', title:'التاسكات', text:'شغل مساعد مش بيتحاسب في التقييم (زي طلب ديزاين أو خطة). تقدر تعمل تاسك لنفسك، والقائد يقدر يطلب منك تاسك.', roles:['member','lead','manager','admin']},
   {ico:'📤', title:'تنزّل بوست إزاي', text:'افتح أي كارت، اكتب التفاصيل، وحرّكه في الحالات. لما يخلص حرّكه لـ «محتاج مراجعة» عشان القائد يراجعه ويوافق.', roles:['member']},
   {ico:'✔️', title:'مراجعة البوستات', text:'لما عضو يحرّك بوست لـ «محتاج مراجعة»، افتحه وتقدر «توافق» (يبقى جاهز للنشر) أو «ترجّعه» بملاحظة للتعديل.', roles:['lead','manager','admin']},
-  {ico:'📅', title:'الأجندة', text:'شغلك مرتّب بالأيام (النهارده، بكرة، الأسبوع ده). والأهم: مرتّبة بالأولوية — المستعجل الأول، وجوه كل مجموعة اللي وقته أطول يظهر فوق. كل يوم افتحها تعرف تعمل إيه.', roles:['member','lead','manager','admin']},
-  {ico:'👥', title:'شغل الفريق', text:'في الأجندة فيه تاب «شغل الفريق» تشوف فيه شغل كل اللي تحتك في مكان واحد.', roles:['lead','manager','admin']},
+  {ico:'🗓️', title:'الخطة', text:'تقويم شهري وأسبوعي بكل بوستات وتاسكات مدرّسينك إنت بمواعيدها. دوس على أي يوم تضيف حاجة بميعاده على طول، وفيه فلتر تشوف بيه مدرّس واحد بس لو عندك أكتر من مدرّس.', roles:['member','lead','manager','admin']},
   {ico:'🎓', title:'المدرّسين', text:'كل مدرّس وخطته. دوس على أي مدرّس تشوف بورده وحده، وتقدر تغيّر صورته ولينكاته ويوم راحته.', roles:['member','lead','manager','admin']},
   {ico:'⭐', title:'التقييم والترتيب', text:'كل موظف بياخد درجة من ١٠٠: انتظامه في النزول ٣٥٪ + التزامه بتوازن الأنواع ٣٠٪ + جودة شغله (تقييم القائد) ٢٠٪ + نمو صفحات مدرّسينه ١٥٪. وفيه ترتيب للشركة كلها.', roles:['member','lead','manager','admin']},
   {ico:'📊', title:'التقارير الشهرية', text:'كل شهر تدخّل إحصائيات فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات (لينك أو صورة). السايت بيجمعها مع شغلك في تقرير واحد.', roles:['lead','manager','admin']},
@@ -3550,9 +3857,9 @@ function guideExtra(){
 
   // نصايح
   let tips = sec('💡 نصايح')
-    + step('افتح «الأجندة» كل صبح — هي اللي بتقوللك تبدأ بإيه بالترتيب الصح.')
+    + step('افتح «الخطة» تشوف شغلك وشغل الفريق مرتّب بالمواعيد في تقويم شهري أو أسبوعي.')
     + step('استخدم «تاسك» لأي شغل مساعد (ديزاين، خطة) عشان ما يلخبطش تقييمك، و«بوست» للمحتوى اللي بينزل فعلاً.')
-    + step('حدّد الأولوية والمدة لكل حاجة — ده اللي بيخلّي الأجندة ترتّب صح.')
+    + step('حدّد ميعاد التسليم لكل حاجة — ده اللي بيخلّي الخطة ترتّب صح.')
     + (isLeader ? step('راجع البوستات بسرعة عشان ما تعطّلش فريقك، ورجّع بملاحظة واضحة لو محتاج تعديل.') : step('لو البوست رجعلك بملاحظة، اقرأها كويس، عدّل، وارجّعه لـ «محتاج مراجعة» تاني.'));
 
   // أسئلة شائعة
@@ -3570,7 +3877,7 @@ function tourSteps(){
   const all=[
     {sel:'[data-view="board"]', title:'البورد — قلب شغلك', text:'الكروت بتتحرّك بالسحب من عمود لعمود. تاب «بوستات» (دي اللي بتتحاسب في تقييمك)، وتاب «تاسكات» (شغل مساعد مش بيتحاسب). جرّب تسحب كارت تغيّر حالته.', roles:['member','lead','manager','admin']},
     {sel:'#addBtn', title:'تضيف شغل', text:'تضيف بوست، أو تبدّل لـ «تاسك» جوه النافذة. لكل كارت تحدّد المدرّس، التصنيف، الأولوية، والمدة المتوقّعة — ودول اللي بيرتّبوا أجندتك.', roles:['member','lead','manager','admin']},
-    {sel:'[data-view="agenda"]', title:'الأجندة — ابدأ يومك منها', text:'شغلك مرتّب: المستعجل الأول، وجوه كل يوم اللي وقته أطول فوق. افتحها كل صبح تعرف تبدأ بإيه بالظبط من غير تفكير.', roles:['member','lead','manager','admin']},
+    {sel:'[data-view="planner"]', title:'الخطة — شهري وأسبوعي', text:'شايف بوستات وتاسكات مدرّسينك إنت بمواعيدها في تقويم شهري أو أسبوعي. دوس على أي يوم تضيف حاجة بميعاده على طول، ودوس على أي بوست تفتح تفاصيله.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="teachers"]', title:'المدرّسين', text:'كل مدرّس وخطته لوحده. دوس على أي مدرّس تشوف بورده مفلتر عليه، وتقدر تغيّر صورته ولينكاته ويوم راحته (اللي مش بيتحاسب عليه).', roles:['member','lead','manager','admin']},
     {sel:'[data-view="rank"]', title:'التقييم والترتيب', text:'درجتك من ١٠٠: انتظامك في النزول ٣٥٪ + توازن الأنواع ٣٠٪ + جودة شغلك ٢٠٪ + نمو صفحاتك ١٥٪. تشوف ترتيبك في الشركة كمان.', roles:['member','lead','manager','admin']},
     {sel:'[data-view="reports"]', title:'التقارير الشهرية', text:'كل شهر تسجّل أرقام فيسبوك لكل مدرّس (متابعين، مشاهدات، تفاعل) مع إثبات إجباري. السايت بيجمعها مع شغلك في صورة واحدة.', roles:['lead','manager','admin']},
@@ -3654,7 +3961,7 @@ window.nextTour=function(){clearTourEl();tourIdx++; if(tourIdx>=tourList.length)
 window.addEventListener('resize',()=>{if(document.getElementById('tourBackdrop').classList.contains('show'))showTourStep();});
 
 /* ---------- card modal ---------- */
-window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher){
+window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher,presetDue){
   const c=id?CARDS.find(x=>x.id===id):null;
   const kind = c ? (c.kind||'post') : (newKind||boardKind||'post');
   const isTask = kind==='task';
@@ -3679,7 +3986,7 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher){
 
   // اختيارات الأولوية والمدة (للنوعين)
   const prioField=`<div class="field"><label>الأولوية</label><div class="seg" id="f_prio">${PRIORITIES.map(p=>`<button data-p="${p.id}" class="${(c?prio(c.priority).id:'normal')===p.id?'on':''}" ${taskLocked?'disabled':''}>${p.ico} ${p.name}</button>`).join('')}</div></div>`;
-  const effortField=`<div class="field"><label>المدة المتوقّعة (اللي بياخد وقت أطول يظهر الأول في الأجندة)</label><select id="f_effort" ${taskLocked?'disabled':''}><option value="">—</option>${EFFORTS.map(e=>`<option value="${e.m}" ${c&&c.effort===e.m?'selected':''}>${e.name}</option>`).join('')}</select></div>`;
+  const effortField=`<div class="field"><label>المدة المتوقّعة</label><select id="f_effort" ${taskLocked?'disabled':''}><option value="">—</option>${EFFORTS.map(e=>`<option value="${e.m}" ${c&&c.effort===e.m?'selected':''}>${e.name}</option>`).join('')}</select></div>`;
 
   let fields;
   if(isTask){
@@ -3690,20 +3997,21 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher){
       <div class="field"><label>المسؤول</label><select id="f_assignee" ${taskLocked?'disabled':''}>${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===ME.id?'selected':'')}>${u.name}</option>`).join('')}</select></div></div>
       <div class="field"><label>المدرّسين (اختياري — التاسك تخص مين)</label><div class="seg" id="f_teachers" style="flex-wrap:wrap">${teacherOpts.length?teacherOpts.map(t=>`<button data-tid="${t.id}" class="${tIds.includes(t.id)?'on':''}" ${taskLocked?'disabled':''} style="flex:none">${t.name}</button>`).join(''):'<span style="color:var(--faint);font-size:12px">مفيش مدرّسين في نطاقك</span>'}</div></div>
       <div class="two">${prioField}${effortField}</div>
-      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}" ${taskLocked?'disabled':''}></div>
+      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:(presetDue||'')}" ${taskLocked?'disabled':''}></div>
       <div class="field"><label>تفاصيل (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="تفاصيل المطلوب…" ${taskLocked?'disabled':''}></div>
       <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
       ${taskLocked?'<div class="lt-empty" style="margin-top:4px">دي تاسك مطلوبة منك — تقدر تحرّكها لـ «بيتعمل» من البورد، والتيم ليدر يأكّد إنها خلصت.</div>':''}`;
   } else {
     fields=`
       <div class="field"><label>عنوان البوست</label><input id="f_title" value="${c?escAttr(c.title):(titleHint?escAttr(titleHint):'')}" placeholder="مثلاً: ريل مراجعة سريعة"></div>
-      <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${(c&&c.teacher_id===t.id)||(!c&&(presetTeacher||scopeTeacher)===t.id)?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
+      <div class="two"><div class="field"><label>المدرّس</label><select id="f_teacher" onchange="checkCatCompliance()">${teacherOpts.length?teacherOpts.map(t=>`<option value="${t.id}" ${(c&&c.teacher_id===t.id)||(!c&&(presetTeacher||scopeTeacher)===t.id)?'selected':''}>${t.name}</option>`).join(''):'<option value="">— ضيف مدرّس الأول —</option>'}</select></div>
       <div class="field"><label>المسؤول</label><select id="f_assignee">${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===initAssignee?'selected':'')}>${u.name}</option>`).join('')}</select></div></div>
-      <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat" onchange="document.getElementById('reelWrap').style.display=this.value==='ريلز'?'block':'none'">${CATS.map(x=>`<option ${(c&&c.category===x)||(!c&&presetCat===x)?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="two"><div class="field"><label>التصنيف</label><select id="f_cat" onchange="document.getElementById('reelWrap').style.display=this.value==='ريلز'?'block':'none';checkCatCompliance();">${CATS.map(x=>`<option ${(c&&c.category===x)||(!c&&presetCat===x)?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>المنصة</label><select id="f_plat">${PLATS.map(p=>`<option value="${p.id}" ${c&&c.platform===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div></div>
+      <div id="catWarn" style="font-size:11.5px;font-weight:700;margin-top:-6px;margin-bottom:8px"></div>
       <div class="field" id="reelWrap" style="display:${(c&&c.category==='ريلز')||(!c&&presetCat==='ريلز')?'block':'none'}"><label>نوع الريل</label><select id="f_subtype">${REEL_TYPES.map(r=>`<option value="${r.id}" ${c&&c.subtype===r.id?'selected':''}>${r.name}</option>`).join('')}</select></div>
       <div class="two">${prioField}${effortField}</div>
-      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:''}"></div>
+      <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:(presetDue||'')}"></div>
       <div class="field"><label>لينك البوست (اختياري)</label><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
       <div class="field"><label>الكابشن (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="نص البوست…"></div>
       <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
@@ -3715,8 +4023,26 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher){
     (c?`<div class="field"><label>التعليقات والمراجعة</label><div class="comments" id="f_comments">${cmts.length?cmts.map(cm=>`<div class="cmt"><div class="h"><b>${U(cm.author_id).name}</b><span>${new Date(cm.created_at).toLocaleDateString('ar-EG')}</span></div>${esc(cm.text)}</div>`).join(''):'<div style="color:var(--faint);font-size:12px">مفيش تعليقات</div>'}</div>
     <div style="display:flex;gap:8px;margin-top:10px"><input id="f_newcmt" placeholder="اكتب ملاحظة…" style="flex:1;background:var(--raised);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:10px 12px"><button class="btn" id="f_addcmt">إضافة</button></div></div>`:'');
 
+  // تحذير لحظي لو التصنيف المختار هيخالف حد الالتزام الأسبوعي للمدرّس
+  window.checkCatCompliance=function(){
+    const warnEl=document.getElementById('catWarn'); if(!warnEl) return;
+    const tEl=document.getElementById('f_teacher'), cEl=document.getElementById('f_cat');
+    if(!tEl||!cEl||!tEl.value){ if(warnEl) warnEl.textContent=''; return; }
+    const tid=tEl.value, cat=cEl.value;
+    const ws=ymd(weekStart()), we=ymd(weekEnd());
+    const counts=teacherCatCounts(tid, ws, we);
+    const rule=COMPLIANCE_RULES.find(r=>r.cat===cat && r.type==='max');
+    if(rule && (counts[cat]||0) >= rule.n){
+      warnEl.style.color='var(--danger)';
+      warnEl.innerHTML = `⚠️ ${esc(T(tid).name)} أصلاً عنده ${counts[cat]||0} ${esc(rule.label)} الأسبوع ده — ده هيبقى رقم ${(counts[cat]||0)+1} ويخالف الحد الأقصى (${rule.n})`;
+    } else {
+      warnEl.textContent='';
+    }
+  };
+  if(!isTask) checkCatCompliance();
+
   // مبدّل النوع للجديد: يعيد فتح المودال بالنوع المختار
-  if(!c){document.querySelectorAll('#f_kind button').forEach(b=>b.onclick=()=>openCard(null,b.dataset.k));}
+  if(!c){document.querySelectorAll('#f_kind button').forEach(b=>b.onclick=()=>openCard(null,b.dataset.k,presetCat,titleHint,presetTeacher,presetDue));}
 
   let cur=startStatus;
   if(!taskLocked) document.querySelectorAll('#f_status button').forEach(b=>b.onclick=()=>{
@@ -3993,7 +4319,7 @@ async function checkPeriodicNotifs(){
   const hadDue=NOTIFS.some(n=>n.type==='due_alert' && (n.created_at||'').slice(0,10)===today);
   if(!hadDue){
     const overdue=CARDS.filter(c=>c.assignee_id===ME.id && isLate(c));
-    if(overdue.length) inserts.push({type:'due_alert',text:`⏰ عندك ${overdue.length} ${overdue.length===1?'حاجة متأخرة':'حاجات متأخرة'} عن ميعادها. راجع الأجندة.`});
+    if(overdue.length) inserts.push({type:'due_alert',text:`⏰ عندك ${overdue.length} ${overdue.length===1?'حاجة متأخرة':'حاجات متأخرة'} عن ميعادها. راجع البورد.`});
   }
   // (٤) للقائد: عضو في فريقك فوّت أيام كتير (مرة في الأسبوع)
   if(ME.role==='lead'||ME.role==='manager'){
