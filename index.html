@@ -1044,7 +1044,7 @@ window.openContentCalEvent=function(day){
 };
 
 const REEL_TYPES=[{id:'youtube',name:'يوتيوب'},{id:'hall',name:'قاعة'},{id:'studio',name:'استوديو'}];
-const TASK_TYPES=['طلب ديزاين','طلب فيديو','خطة','مراجعة','تصوير','أخرى'];
+const TASK_TYPES=['طلب ديزاين','طلب فيديو','خطة','مراجعة','تصوير','نزول تيك توك ويوتيوب','أخرى'];
 const PRIORITIES=[{id:'urgent',name:'مستعجل',ico:'🔴',rank:0},{id:'important',name:'مهم',ico:'🟠',rank:1},{id:'normal',name:'عادي',ico:'⚪',rank:2}];
 const QUALITY=[{v:1,name:'سيء'},{v:2,name:'عادي'},{v:3,name:'كويس'},{v:4,name:'ممتاز'}];
 function qualityName(v){const q=QUALITY.find(x=>x.v===v);return q?q.name:'';}
@@ -1055,12 +1055,13 @@ function prio(id){return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2];}
 function effortName(m){const e=EFFORTS.find(x=>x.m===m);return e?e.name:'';}
 function cardIcon(c){
   if((c.kind||'post')==='task'){
-    return {'طلب ديزاين':'🎨','طلب فيديو':'🎬','خطة':'📋','مراجعة':'🔍','تصوير':'📸'}[c.category]||'✅';
+    return {'طلب ديزاين':'🎨','طلب فيديو':'🎬','خطة':'📋','مراجعة':'🔍','تصوير':'📸','نزول تيك توك ويوتيوب':'📲'}[c.category]||'✅';
   }
   if(c.category==='ريلز') return {youtube:'▶️',hall:'🏛️',studio:'🎙️'}[c.subtype]||'🎬';
   return {'كوميك':'😂','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣'}[c.category]||'📱';
 }
 const PLATS=[{id:'fb',name:'فيسبوك'},{id:'yt',name:'يوتيوب'},{id:'tk',name:'تيك توك'},{id:'ig',name:'انستجرام'}];
+const DESIGN_SITE_URL='https://dashboard.atotrick.site/';
 const LINKS=[
   {key:'link_youtube', name:'يوتيوب',       hint:'قناة المدرّس', ico:'▶', bg:'#FF0000'},
   {key:'link_facebook',name:'فيسبوك',       hint:'صفحة المدرّس', ico:'f', bg:'#1877F2'},
@@ -1602,6 +1603,50 @@ async function recordPublish(card, dateStr){
   // امنع التكرار لو الكارت ده اتسجّل قبل كده
   if(card.id && PUBLOG.some(l=>l.card_id===card.id)) return;
   await sb.from('publish_log').insert({card_id:card.id||null, teacher_id:card.teacher_id, member_id:card.assignee_id||ME.id, pub_date:day});
+  // تلقائي: أي ريل بينزل → تاسك تاني يوم إنه ينزل تيك توك ويوتيوب برضو
+  if(card.id && card.category==='ريلز'){ await autoReelFollowupTask(card, day); }
+}
+// إنشاء تاسك تلقائي تاني يوم نشر الريل — علشان نفس الريل ينزل تيك توك ويوتيوب
+async function autoReelFollowupTask(card, pubDate){
+  const nextDay = ymd(addDays(new Date(pubDate+'T00:00:00'), 1));
+  const marker = `AUTO_REEL_FOLLOWUP:${card.id}`;
+  const taskData = {
+    title:`انزّل نفس الريل تيك توك ويوتيوب: ${card.title}`,
+    kind:'task', category:'نزول تيك توك ويوتيوب',
+    assignee_id: card.assignee_id||ME.id,
+    teacher_ids: card.teacher_id?[card.teacher_id]:null,
+    due: nextDay,
+    caption:`تلقائي — الريل ده نزل يوم ${pubDate}، لازم ينزل تيك توك ويوتيوب كمان. ${marker}`,
+    status:'requested', priority:'normal', teacher_id:null, effort:null
+  };
+  const {error}=await sb.from('cards').insert({...taskData,created_by:ME.id});
+  if(!error && taskData.assignee_id!==ME.id){
+    await notify(taskData.assignee_id,'task_assigned',`تاسك تلقائي: نزّل الريل "${card.title}" على تيك توك ويوتيوب — تسليمها ${nextDay}`,null);
+  }
+}
+// تلقائي: أي بوست ديزاين بميعاد تسليم → تاسك "اطلب ديزاين" قبله بـ ٣ أيام (٧٢ ساعة)
+async function autoDesignRequestTask(cardId, title, teacherId, assigneeId, due){
+  if(!due) return;
+  const reqDue = ymd(addDays(new Date(due+'T00:00:00'), -3));
+  const marker = `AUTO_DESIGN_REQ:${cardId}`;
+  const {data:existing} = await sb.from('cards').select('id,due').eq('kind','task').ilike('caption',`%${marker}%`).limit(1);
+  if(existing && existing.length){
+    if(existing[0].due!==reqDue){ await sb.from('cards').update({due:reqDue}).eq('id',existing[0].id); }
+    return;
+  }
+  const taskData={
+    title:`اطلب ديزاين: ${title}`,
+    kind:'task', category:'طلب ديزاين',
+    assignee_id: assigneeId||ME.id,
+    teacher_ids: teacherId?[teacherId]:null,
+    due: reqDue,
+    caption:`تلقائي — لازم يتطلب قبل تسليم "${title}" (${due}) بـ ٣ أيام (٧٢ ساعة). ${marker}`,
+    status:'requested', priority:'normal', teacher_id:null, effort:null
+  };
+  const {error}=await sb.from('cards').insert({...taskData,created_by:ME.id});
+  if(!error && taskData.assignee_id!==ME.id){
+    await notify(taskData.assignee_id,'task_assigned',`تاسك تلقائي: اطلب ديزاين "${title}" — قبل تسليمه بـ ٣ أيام (تسليم التاسك ${reqDue})`,null);
+  }
 }
 // نافذة: البوست ده اتنشر يوم كام؟ (الموظف: آخر ٣ أيام · القائد/الأدمن: أي يوم فات)
 window.openPublishDate=function(cardId){
@@ -3993,8 +4038,9 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher,presetDue)
     const tIds=c?(c.teacher_ids||[]):[];
     fields=`
       <div class="field"><label>عنوان التاسك</label><input id="f_title" value="${c?escAttr(c.title):''}" placeholder="مثلاً: اعمل ديزاين بوست العرض" ${taskLocked?'disabled':''}></div>
-      <div class="two"><div class="field"><label>نوع التاسك</label><select id="f_tasktype" ${taskLocked?'disabled':''}>${TASK_TYPES.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="two"><div class="field"><label>نوع التاسك</label><select id="f_tasktype" ${taskLocked?'disabled':''} onchange="document.getElementById('designSiteWrap').style.display=this.value==='طلب ديزاين'?'block':'none'">${TASK_TYPES.map(x=>`<option ${c&&c.category===x?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>المسؤول</label><select id="f_assignee" ${taskLocked?'disabled':''}>${assignable.map(u=>`<option value="${u.id}" ${c&&c.assignee_id===u.id?'selected':(!c&&u.id===ME.id?'selected':'')}>${u.name}</option>`).join('')}</select></div></div>
+      <div class="field" id="designSiteWrap" style="display:${(c?c.category==='طلب ديزاين':true)?'block':'none'}"><button type="button" class="btn ghost" id="openDesignSite" style="width:100%;justify-content:center">🎨 افتح سايت طلب الديزاين</button></div>
       <div class="field"><label>المدرّسين (اختياري — التاسك تخص مين)</label><div class="seg" id="f_teachers" style="flex-wrap:wrap">${teacherOpts.length?teacherOpts.map(t=>`<button data-tid="${t.id}" class="${tIds.includes(t.id)?'on':''}" ${taskLocked?'disabled':''} style="flex:none">${t.name}</button>`).join(''):'<span style="color:var(--faint);font-size:12px">مفيش مدرّسين في نطاقك</span>'}</div></div>
       <div class="two">${prioField}${effortField}</div>
       <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:(presetDue||'')}" ${taskLocked?'disabled':''}></div>
@@ -4040,6 +4086,13 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher,presetDue)
     }
   };
   if(!isTask) checkCatCompliance();
+  const designBtn=document.getElementById('openDesignSite');
+  if(designBtn) designBtn.onclick=()=>{
+    const titleEl=document.getElementById('f_title'), capEl=document.getElementById('f_caption');
+    const txt=[titleEl?titleEl.value:'',capEl?capEl.value:''].filter(Boolean).join(' — ');
+    if(txt && navigator.clipboard) navigator.clipboard.writeText(txt).then(()=>toast('اتنسخ التفاصيل — الصقها في سايت الديزاين ✓')).catch(()=>{});
+    window.open(DESIGN_SITE_URL,'_blank');
+  };
 
   // مبدّل النوع للجديد: يعيد فتح المودال بالنوع المختار
   if(!c){document.querySelectorAll('#f_kind button').forEach(b=>b.onclick=()=>openCard(null,b.dataset.k,presetCat,titleHint,presetTeacher,presetDue));}
@@ -4129,6 +4182,11 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher,presetDue)
     // إشعار: عضو حوّل بوست لـ«محتاج مراجعة» → القائد بتاعه
     if(!isTask && cur==='review' && (!c || c.status!=='review')){
       const lead=U(data.assignee_id).lead_id; if(lead) await notify(lead,'post_review',`${U(data.assignee_id).name} مستني مراجعتك على البوست: ${t}`,c?c.id:null);
+    }
+    // تلقائي: بوست ديزاين بميعاد تسليم → تاسك "اطلب ديزاين" قبله بـ ٣ أيام
+    if(!isTask && data.category==='ديزاين' && data.due){
+      const cid = c?c.id:(newCard&&newCard.id);
+      if(cid) await autoDesignRequestTask(cid, t, data.teacher_id, data.assignee_id, data.due);
     }
     await reload();closeModal();render();toast(c?'اتحفظ':'اتضاف');
     if(pubTransition){ const pid=c?c.id:(newCard&&newCard.id); if(pid) openPublishDate(pid); }
