@@ -1111,6 +1111,7 @@ let rankMonth=null; // شهر التقييم المعروض (افتراضي: ا�
 let ANNOUNCE=null; // إعلان الأدمن {v,title,body,date}
 let EXEMPTIONS={}; // إعفاءات التقارير { teacherId: {type:'permanent'|'month', ym?} }
 let STOPPED=[]; // مدرّسين موقوفين (مش بيتحسبوا في أي حاجة) — array of teacher ids
+let TOWNER_HIST=[]; // سجل تاريخي: مين كان ماسك كل مدرّس وامتى — {id, teacher_id, owner_id, from_date, to_date(null = لسه مستمر)}
   let RANK_MAINTENANCE = false; // وضع صيانة التقييمات
 function isTeacherStopped(id){ return STOPPED.includes(id); }
 async function setTeacherStopped(id,stop){
@@ -1258,6 +1259,7 @@ async function reload(){
 sb.from('app_settings').select('*').in('key',['announcement','report_exemptions','stopped_teachers','rank_maintenance']),    sb.from('teacher_reviews').select('*'),
     sb.from('adjustments').select('*'),
     sb.from('content_calendar').select('*'),
+    sb.from('teacher_owner_history').select('*'),
   ]);
   PROFILES=small[0].data||[]; TEACHERS=small[1].data||[]; NOTIFS=small[2].data||[]; REPORTS=small[3].data||[];
   { const rows=small[4].data||[];
@@ -1269,6 +1271,8 @@ sb.from('app_settings').select('*').in('key',['announcement','report_exemptions'
   TREVIEWS=small[5].data||[];
   ADJUSTMENTS=small[6].data||[];
   CONTENT_CAL_ROWS=small[7].data||[];
+  TOWNER_HIST=small[8].data||[];
+  await backfillOwnerHistory();
 
   if(loadedAll){ await loadAllCards(); return; }
 
@@ -1350,6 +1354,106 @@ function expectedDays(teacher, ym){
   }
   return days;
 }
+
+/* ================== تاريخ ملكية المدرّسين (owner history) ==================
+   المشكلة اللي ده بيحلّها: لو مدرس اتشال من موظف (مقصّر معاه مثلاً)، التقييم كان
+   بيشيل كل تاريخه (بوستات فايتة، أيام مطلوبة) من حساب الموظف القديم بأثر رجعي —
+   حتى الشهور اللي فاتت واتقيّمت. دلوقتي كل يوم بيتنسب لمين كان ماسك المدرس فعليًا
+   فيه، حتى لو اتنقل لموظف تاني بعد كده. ملحوظة: الشهور اللي المدرسين اتشالوا فيها
+   *قبل* التعديل ده هتفضل زي ما هي (متأثرة بالباج القديم) — السجل التاريخي مش موجود
+   قبل كده وميتصلّحش بأثر رجعي. */
+function ownerSegmentsFor(teacherId){
+  return TOWNER_HIST.filter(h=>h.teacher_id===teacherId).slice().sort((a,b)=>a.from_date<b.from_date?-1:(a.from_date>b.from_date?1:0));
+}
+// مين كان ماسك المدرس ده في يوم معيّن (null لو محدش)
+function teacherOwnerAt(teacherId, dateStr){
+  const segs=ownerSegmentsFor(teacherId);
+  for(const s of segs){ if(dateStr>=s.from_date && (!s.to_date || dateStr<s.to_date)) return s.owner_id; }
+  return null;
+}
+// بيتنادى كل ما owner_id لمدرّس يتغيّر: بيقفل الفترة المفتوحة ويفتح فترة جديدة
+async function recordOwnerChange(teacherId, newOwnerId, dateStr, force){
+  dateStr = dateStr || ymd(new Date());
+  const open = TOWNER_HIST.find(h=>h.teacher_id===teacherId && !h.to_date);
+  if(open && open.owner_id===newOwnerId && !force) return;
+  if(open){
+    const {error}=await sb.from('teacher_owner_history').update({to_date:dateStr}).eq('id',open.id);
+    if(!error) open.to_date=dateStr;
+  }
+  if(newOwnerId){
+    const {data,error}=await sb.from('teacher_owner_history').insert({teacher_id:teacherId, owner_id:newOwnerId, from_date:dateStr, to_date:null}).select().single();
+    if(!error && data) TOWNER_HIST.push(data);
+  }
+}
+// أول مرة: أي مدرّس ماسكه حد ومفيش له سجل تاريخي → نفتحله سجل يبدأ من assigned_at (أو النهاردة لو مفيش)
+async function backfillOwnerHistory(){
+  const missing = TEACHERS.filter(t=>t.owner_id && !TOWNER_HIST.some(h=>h.teacher_id===t.id));
+  if(!missing.length) return;
+  const rows = missing.map(t=>({teacher_id:t.id, owner_id:t.owner_id, from_date:t.assigned_at||ymd(new Date()), to_date:null}));
+  const {data,error}=await sb.from('teacher_owner_history').insert(rows).select();
+  if(!error && data) TOWNER_HIST.push(...data);
+}
+// الأيام اللي الموظف ده كان مسؤول فعليًا فيها عن مدرّس معيّن، جوه شهر معيّن
+function expectedDaysForOwner(teacherId, memberId, ym){
+  ym = ym || ymNow();
+  const days=[];
+  let start=new Date(monthStartOf(ym));
+  let end;
+  if(ym===ymNow()){ end=new Date(); end.setHours(0,0,0,0); }
+  else { const [y,m]=ym.split('-').map(Number); end=new Date(y,m,1); }
+  let d=new Date(start);
+  while(d<end){
+    const ds=ymd(d);
+    if(teacherOwnerAt(teacherId, ds)===memberId) days.push(ds);
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  return days;
+}
+// كل الأيام المطلوبة للمدرّس في الشهر بغض النظر مين ماسكه (أساس حساب الفوات والسماح الأسبوعي)
+function expectedDaysAllOwners(teacherId, ym){
+  ym = ym || ymNow();
+  const days=[];
+  let start=new Date(monthStartOf(ym));
+  let end;
+  if(ym===ymNow()){ end=new Date(); end.setHours(0,0,0,0); }
+  else { const [y,m]=ym.split('-').map(Number); end=new Date(y,m,1); }
+  let d=new Date(start);
+  while(d<end){
+    const ds=ymd(d);
+    if(teacherOwnerAt(teacherId, ds)) days.push(ds);
+    d=new Date(d); d.setDate(d.getDate()+1);
+  }
+  return days;
+}
+// الأيام الفايتة لمدرّس (كل الأونرز مع بعض) + السماح الأسبوعي — مصدر واحد، بعدين بيتوزّع على الأونرز حسب اليوم
+function teacherMissPool(teacherId, ym){
+  const done=publishedDays(teacherId, ym);
+  const missed=expectedDaysAllOwners(teacherId, ym).filter(d=>!done.has(d));
+  const seen=new Set(), forgiven=new Set();
+  missed.slice().sort().forEach(ds=>{const wk=weekKeySat(ds); if(!seen.has(wk)){seen.add(wk); forgiven.add(ds);}});
+  return {missed, forgiven};
+}
+// حصة موظف معيّن من فوات/سماح مدرّس معيّن — كل يوم بيتحاسب على اللي كان ماسك المدرس فيه فعلاً
+function ownerMissInfo(teacherId, memberId, ym){
+  const {missed, forgiven}=teacherMissPool(teacherId, ym);
+  const mine=missed.filter(d=>teacherOwnerAt(teacherId,d)===memberId);
+  const forgivenMine=mine.filter(d=>forgiven.has(d));
+  return {raw:mine.length, forgiven:forgivenMine.length, counted:mine.length-forgivenMine.length};
+}
+// كل المدرّسين اللي الموظف ده كان مسؤول عنهم يوم واحد على الأقل جوه الشهر ده — مش بس اللي ماسكهم دلوقتي
+function memberTeachersForYm(memberId, ym){
+  ym = ym || ymNow();
+  const mStart=ymd(monthStartOf(ym));
+  const [y,m]=ym.split('-').map(Number);
+  const mEndExclusive = (ym===ymNow()) ? ymd((()=>{const dd=new Date();dd.setHours(0,0,0,0);return dd;})()) : ymd(new Date(y,m,1));
+  const ids=new Set();
+  TOWNER_HIST.forEach(h=>{
+    if(h.owner_id!==memberId) return;
+    if(h.from_date < mEndExclusive && (!h.to_date || h.to_date > mStart)) ids.add(h.teacher_id);
+  });
+  return [...ids].map(id=>TEACHERS.find(t=>t.id===id)).filter(t=>t && !isTeacherStopped(t.id));
+}
+/* ================== نهاية تاريخ ملكية المدرّسين ================== */
 // مفتاح الأسبوع (بيبدأ السبت)
 function weekKeySat(ds){const d=new Date(ds+'T00:00:00'); const off=(d.getDay()+1)%7; d.setDate(d.getDate()-off); return ymd(d);}
 // أول يوم فايت في كل أسبوع بيتسامح (إجازة مرنة) — بنرجّع مجموعة الأيام المسموح بيها
@@ -1387,13 +1491,16 @@ function memberPosts(memberId, ym){
 }
 // إجمالي الأيام الفايتة المحتسبة (بعد سماح يوم/أسبوع) عبر كل مدرّسين العضو
 function memberMissed(memberId, ym){
-  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+teacherMissInfo(t.id, ym).counted,0);
+  ym = ym || ymNow();
+  return memberTeachersForYm(memberId, ym).reduce((s,t)=>s+ownerMissInfo(t.id, memberId, ym).counted,0);
 }
 function memberForgiven(memberId, ym){
-  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+teacherMissInfo(t.id, ym).forgiven,0);
+  ym = ym || ymNow();
+  return memberTeachersForYm(memberId, ym).reduce((s,t)=>s+ownerMissInfo(t.id, memberId, ym).forgiven,0);
 }
-function memberTeacherBreakdown(memberId){
-  return TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).map(t=>({t, posts:teacherPosts(t.id), missed:teacherMissInfo(t.id).counted}));
+function memberTeacherBreakdown(memberId, ym){
+  ym = ym || ymNow();
+  return memberTeachersForYm(memberId, ym).map(t=>({t, posts:teacherPosts(t.id, ym), missed:ownerMissInfo(t.id, memberId, ym).counted}));
 }
 // متوسط جودة شغل العضو الشهر ده (من تقييم القائد) — 0..1 أو null لو مفيش تقييمات
 function memberQuality(memberId, ym){
@@ -1406,20 +1513,27 @@ function memberQuality(memberId, ym){
 // بيقيس التحسن النسبي مش الأرقام الخام عشان يكون عادل بين الصفحات الكبيرة والصغيرة
 function memberGrowthScore(memberId, ym){
   const curYm=ym||ymNow();
-  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  const ts=memberTeachersForYm(memberId, curYm);
   if(!ts.length) return null;
   const av=a=>a.reduce((x,y)=>x+y,0)/a.length;
-  // إجمالي شهر معيّن (لكل مدرّسي الموظف اللي ليهم تقرير الشهر ده)
-  const sumMonth=(m)=>{
+  // إجمالي شهر معيّن، لمجموعة مدرّسين معيّنة (ملحوظة: أرقام النمو شهرية مش يومية،
+  // فلو مدرّس اتنقل نص الشهر بتحسب لكل الأونرز اللي مسكوه — تبسيط مقصود)
+  const sumMonth=(m, teacherIds)=>{
     let f=0,v=0,e=0,has=false;
-    ts.forEach(t=>{ const r=getReport(t.id,m); if(r){ f+=r.new_followers||0; v+=+r.views||0; e+=+r.engagement||0; has=true; } });
+    teacherIds.forEach(id=>{ const r=getReport(id,m); if(r){ f+=r.new_followers||0; v+=+r.views||0; e+=+r.engagement||0; has=true; } });
     return has?{f,v,e}:null;
   };
-  const cur=sumMonth(curYm);
+  const curIds=ts.map(t=>t.id);
+  const cur=sumMonth(curYm, curIds);
   if(!cur) return null;
-  // الأساس = متوسط آخر (لحد ٣) شهور اللي فيها بيانات — عشان الشهر الخارق مايبقاش سقف يعاقبك
+  // الأساس = متوسط آخر (لحد ٣) شهور اللي فيها بيانات — لكل شهر بنستخدم مدرّسي الموظف *وقتها* مش دلوقتي
   const hist=[];
-  for(let k=1;k<=3;k++){ const m=sumMonth(shiftYm(curYm,-k)); if(m) hist.push(m); }
+  for(let k=1;k<=3;k++){
+    const m=shiftYm(curYm,-k);
+    const idsForM=memberTeachersForYm(memberId, m).map(t=>t.id);
+    const s=idsForM.length?sumMonth(m, idsForM):null;
+    if(s) hist.push(s);
+  }
   if(!hist.length) return null; // مفيش أساس نقارن بيه لسه
   const base={ f:av(hist.map(x=>x.f)), v:av(hist.map(x=>x.v)), e:av(hist.map(x=>x.e)) };
   const ratios=[];
@@ -1433,9 +1547,19 @@ function memberGrowthScore(memberId, ym){
 }
 // balance الأسابيع المكتملة في الشهر الحالي — 0..1 أو null
 // الأسبوع "مكتمل" لو الجمعة بتاعته عدّت
+function teacherCatCountsForOwner(teacherId, memberId, fromYmd, toYmd){
+  const counts={}; CATS.forEach(c=>counts[c]=0); counts['غير مصنّف']=0;
+  PUBLOG.filter(l=>l.teacher_id===teacherId && l.pub_date>=fromYmd && l.pub_date<=toYmd && teacherOwnerAt(teacherId, l.pub_date)===memberId).forEach(l=>{
+    let cat='غير مصنّف';
+    if(l.card_id){ const card=CARDS.find(x=>x.id===l.card_id); cat=card&&card.category?card.category:'غير مصنّف'; }
+    if(counts[cat]===undefined) counts[cat]=0;
+    counts[cat]++;
+  });
+  return counts;
+}
 function memberBalanceScore(memberId, ym){
   ym = ym || ymNow();
-  const ts=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  const ts=memberTeachersForYm(memberId, ym);
   if(!ts.length) return null;
   
   const mStart=monthStartOf(ym);
@@ -1447,15 +1571,10 @@ function memberBalanceScore(memberId, ym){
   let d=new Date(mStart);
   while(d.getDay()!==6) d.setDate(d.getDate()+1); 
   
-  const calcWeek = (active, fromYmd, toYmd, isCurrentIncompleteWeek) => {
-    const teacherScores=active.map(t=>{
-      const counts=teacherCatCounts(t.id, fromYmd, toYmd);
-      
-      const assigned = t.assigned_at ? new Date(t.assigned_at+'T00:00:00') : new Date(0);
-      const wStart = new Date(fromYmd+'T00:00:00');
-      const daysActive = Math.round((new Date(toYmd+'T23:59:59') - Math.max(assigned, wStart)) / 864e5);
-      
-      const ignoreMin = daysActive < 4 || isCurrentIncompleteWeek;
+  // كل قسمة على أساس أيام الأسبوع اللي كان الموظف ده فعلاً ماسك فيها المدرّس (مش كل الأسبوع تلقائي)
+  const calcWeek = (entries) => {
+    const teacherScores=entries.map(({counts,daysActive})=>{
+      const ignoreMin = daysActive < 4;
 
       const minRules=COMPLIANCE_RULES.filter(r=>r.type==='min');
       const minScore=minRules.length
@@ -1482,9 +1601,14 @@ function memberBalanceScore(memberId, ym){
     const weekFromYmd=ymd(d);
     
     if(fri<=cutoff){
-      const active=ts.filter(t=>!t.assigned_at || t.assigned_at.slice(0,10)<=friYmd);
-      if(active.length){
-        weekScores.push(calcWeek(active, weekFromYmd, friYmd, false));
+      const entries=[];
+      ts.forEach(t=>{
+        let cnt=0, dd=new Date(weekFromYmd+'T00:00:00');
+        while(ymd(dd)<=friYmd){ if(teacherOwnerAt(t.id, ymd(dd))===memberId) cnt++; dd.setDate(dd.getDate()+1); }
+        if(cnt>0) entries.push({counts: teacherCatCountsForOwner(t.id, memberId, weekFromYmd, friYmd), daysActive: cnt});
+      });
+      if(entries.length){
+        weekScores.push(calcWeek(entries));
       }
     }
     d.setDate(d.getDate()+7);
@@ -1514,22 +1638,23 @@ function memberManageScore(memberId, ym){
 // نقطة تقييم العضو: انتظام 35٪ + balance 30٪ + جودة 20٪ + نمو الصفحة 15٪
 // + معامل الأيام: النقطة الكاملة تتضرب في نسبة أيام العضو من أيام الشهر الكلية (عشان العدالة)
 function memberDaysFactor(memberId, ym){
-  // أقدم assigned_at بين مدرّسي العضو = أول يوم اشتغل فيه
+  // أول يوم كان الموظف فيه مسؤول فعليًا عن مدرّس واحد على الأقل (حسب سجل الملكية، مش أي مدرّس ماسكه دلوقتي)
   ym = ym || ymNow();
-  const ts = TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id));
+  const ts = memberTeachersForYm(memberId, ym);
   if(!ts.length) return 1;
-  // نحسب إجمالي أيام الشهر لحد إمبارح (نفس ما بيحسبه expectedDays لمدرّس بدأ من أول الشهر)
   const monthStart = new Date(monthStartOf(ym));
   let monthEnd;
   if(ym===ymNow()){ monthEnd=new Date(); monthEnd.setHours(0,0,0,0); }
   else { const [y,m]=ym.split('-').map(Number); monthEnd=new Date(y,m,1); }
   const totalMonthDays = Math.max(1, Math.round((monthEnd-monthStart)/(1000*60*60*24)));
-  // أقدم أيام العضو (أقدم assigned_at بين مدرّسيه)
-  const earliest = ts.reduce((mn,t)=>{
-    if(!t.assigned_at) return mn;
-    const d=new Date(t.assigned_at+'T00:00:00');
-    return (!mn||d<mn)?d:mn;
-  }, null);
+  let earliest=null;
+  ts.forEach(t=>{
+    const days=expectedDaysForOwner(t.id, memberId, ym);
+    if(days.length){
+      const d=new Date(days[0]+'T00:00:00');
+      if(!earliest||d<earliest) earliest=d;
+    }
+  });
   if(!earliest || earliest<=monthStart) return 1; // بدأ من أول الشهر أو قبله → معامل 1
   const memberDays = Math.max(1, Math.round((monthEnd-earliest)/(1000*60*60*24)));
   return memberDays / totalMonthDays;
@@ -1555,7 +1680,7 @@ function adjustmentLineHtml(a){
 function memberScore(memberId, ym){
   ym = ym || ymNow();
   const isCur = (ym===ymNow());
-  const expectedRaw=TEACHERS.filter(t=>t.owner_id===memberId && !isTeacherStopped(t.id)).reduce((s,t)=>s+expectedDays(t, ym).length,0);
+  const expectedRaw=memberTeachersForYm(memberId, ym).reduce((s,t)=>s+expectedDaysForOwner(t.id, memberId, ym).length,0);
   
   const forgiven=memberForgiven(memberId, ym);
   const expectedTotal=Math.max(0,expectedRaw-forgiven);
@@ -3106,10 +3231,11 @@ window.doFreshStart=async function(){
     if(e3){errors++;console.error('monthly_reports:',e3.message);}
   }
 
-  // 4. تحديث assigned_at لكل مدرّسيه للنهارده
+  // 4. تحديث assigned_at لكل مدرّسيه للنهارده + إعادة فتح فترة الملكية من النهارده (نفس الأونر، بداية جديدة)
   for(const t of ts){
     const {error:e4}=await sb.from('teachers').update({assigned_at:today}).eq('id',t.id);
     if(e4){errors++;console.error('teacher assigned_at:',e4.message);}
+    else{ await recordOwnerChange(t.id, memberId, today, true); }
   }
 
   await reload();
@@ -3137,6 +3263,7 @@ window.setParent=async function(id,parentId){
 window.setTeacherOwner=async function(tid,ownerId){
   const {error}=await sb.from('teachers').update({owner_id:ownerId, assigned_at:ymd(new Date())}).eq('id',tid);
   if(error)return toast(error.message,true);
+  await recordOwnerChange(tid, ownerId);
   await reload();render();toast('اتنقل المدرّس');
 };
 window.toggleActive=async function(id){
@@ -3150,6 +3277,8 @@ window.deleteMember=async function(id){
   const p=U(id);
   if(!confirm(`متأكد تمسح «${p.name}» نهائيًا؟ ده هيشيله من السايت. (الحساب نفسه ممكن تمسحه بعدين من Supabase)`))return;
   // فك ارتباط مدرّسينه ومرؤوسينه الأول
+  const theirTeachers=TEACHERS.filter(t=>t.owner_id===id);
+  for(const t of theirTeachers){ await recordOwnerChange(t.id, null); }
   await sb.from('teachers').update({owner_id:null}).eq('owner_id',id);
   await sb.from('profiles').update({lead_id:null}).eq('lead_id',id);
   const {error}=await sb.from('profiles').delete().eq('id',id);
@@ -3196,13 +3325,16 @@ window.openTeacher=function(tid){
     const data={name,subject:document.getElementById('t_subject').value.trim()||null,owner_id:val('t_owner')};
     const pf=document.getElementById('t_photo').files[0];
     if(pf){toast('بترفع الصورة…');const url=await uploadAvatar(pf,'teacher-'+(t?t.id:Date.now()));if(url)data.avatar_url=url;}
-    let error;
+    let error, newRow;
+    const ownerChanged = t && t.owner_id!==data.owner_id;
     if(t){
-      if(t.owner_id!==data.owner_id) data.assigned_at=ymd(new Date()); // اتنقل لموظف تاني → نبدأ المتابعة من النهارده
+      if(ownerChanged) data.assigned_at=ymd(new Date()); // اتنقل لموظف تاني → نبدأ المتابعة من النهارده
       ({error}=await sb.from('teachers').update(data).eq('id',t.id));
+      if(!error && ownerChanged) await recordOwnerChange(t.id, data.owner_id);
     } else {
       data.assigned_at=ymd(new Date());
-      ({error}=await sb.from('teachers').insert(data));
+      ({data:newRow, error}=await sb.from('teachers').insert(data).select().single());
+      if(!error && newRow) await recordOwnerChange(newRow.id, data.owner_id);
     }
     if(error)return toast(error.message,true);
     await reload();closeModal();render();toast(t?'اتحفظ':'اتضاف المدرّس');
