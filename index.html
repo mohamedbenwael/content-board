@@ -662,7 +662,7 @@ const STATUSES=[{id:'idea',name:'فكرة',color:'var(--idea)'},{id:'doing',name
   {id:'published',name:'اتنشر',color:'var(--pub)'}];
 const TASK_STATUSES=[{id:'requested',name:'مطلوب',color:'var(--idea)'},{id:'tdoing',name:'بيتعمل',color:'var(--doing)'},
   {id:'done',name:'خلص',color:'var(--ready)'}];
-const CATS=['كوميك','ريلز','ديزاين','كاروسيل','برومو'];
+const CATS=['كوميك','ريلز','ديزاين','كاروسيل','برومو','كتابة'];
 const PLAN_CATS=['كوميك','ريلز','ديزاين']; // الأنواع اللي بتدخل في دورة التنويع التلقائي (البرومو والكاروسيل مش بيتقترحوا تلقائي)
 // ===== قواعد الالتزام الأسبوعي (لكل الحسابات) =====
 const COMPLIANCE_RULES=[
@@ -738,7 +738,7 @@ function findOccasion(d){
   const ce=CONTENT_CAL_ROWS.find(r=>r.ym===ym&&+r.day===day); if(ce) return ce.occ;
   return null;
 }
-const CAT_ICON={'كوميك':'😂','ريلز':'🎬','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣'};
+const CAT_ICON={'كوميك':'😂','ريلز':'🎬','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣','كتابة':'✍️'};
 // آخر تصنيف اتنزل لمدرّس قبل تاريخ معيّن — بتاخد أول تصنيف من دورة التنويع في كل يوم (بنفس منطق خطة الأسبوع بالظبط، عشان الاقتراح اليومي وخطة الأسبوع دايمًا يتفقوا)
 function lastCategoryBefore(teacherId, beforeYmd){
   const byDate={};
@@ -1058,7 +1058,7 @@ function cardIcon(c){
     return {'طلب ديزاين':'🎨','طلب فيديو':'🎬','خطة':'📋','مراجعة':'🔍','تصوير':'📸','نزول تيك توك ويوتيوب':'📲'}[c.category]||'✅';
   }
   if(c.category==='ريلز') return {youtube:'▶️',hall:'🏛️',studio:'🎙️'}[c.subtype]||'🎬';
-  return {'كوميك':'😂','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣'}[c.category]||'📱';
+  return {'كوميك':'😂','ديزاين':'🎨','كاروسيل':'🖼️','برومو':'📣','كتابة':'✍️'}[c.category]||'📱';
 }
 const PLATS=[{id:'fb',name:'فيسبوك'},{id:'yt',name:'يوتيوب'},{id:'tk',name:'تيك توك'},{id:'ig',name:'انستجرام'}];
 const DESIGN_SITE_URL='https://dashboard.atotrick.site/';
@@ -2117,7 +2117,7 @@ function cardHTML(c){
   const t=T(c.teacher_id);
   return `<div class="card" draggable="true" data-id="${c.id}"><div class="teacher-pill">${ico} ${t.name}</div>
     <div class="ttl">${esc(c.title)}</div><div class="meta"><span class="tag cat">${c.category||'—'}${c.subtype?' · '+(REEL_TYPES.find(r=>r.id===c.subtype)?.name||''):''}</span>
-    ${prioBadge(c)}${qualityBadge(c)}${c.post_link?`<span class="tag plat">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
+    ${prioBadge(c)}${qualityBadge(c)}${c.post_link?`<span class="tag plat" title="افتح اللينك" onclick="event.stopPropagation();window.open(normUrl('${escAttr(c.post_link)}'),'_blank','noopener')">🔗</span>`:''}${nc?`<span class="tag plat">💬 ${nc}</span>`:''}</div>
     <div class="foot">${avaP(a.id)}<span class="who">${a.name}</span>${dueChip(c)}</div></div>`;}
 function wireBoard(){
   document.querySelectorAll('.card').forEach(el=>{
@@ -3365,6 +3365,8 @@ function canEditTeacher(t){
   if(ME.role==='lead' && PROFILES.some(p=>p.id===t.owner_id && p.lead_id===ME.id))return true;
   return false;
 }
+window.openPostLink=function(el){ if(el.readOnly && el.value.trim()) window.open(normUrl(el.value),'_blank','noopener'); };
+window.editPostLink=function(){ const i=document.getElementById('f_link'); if(!i)return; i.readOnly=false; i.style.cursor=''; i.style.color=''; i.focus(); i.select(); const b=document.getElementById('f_link_edit'); if(b)b.remove(); };
 function normUrl(u){ if(!u)return''; u=u.trim(); if(!u)return''; return /^https?:\/\//i.test(u)?u:'https://'+u; }
 function linkTreeView(){
   const t=T(linkTeacher); if(!t||!t.id) {view='board';return boardView();}
@@ -4190,7 +4192,7 @@ window.openCard=function(id,newKind,presetCat,titleHint,presetTeacher,presetDue)
       <div class="field" id="reelWrap" style="display:${(c&&c.category==='ريلز')||(!c&&presetCat==='ريلز')?'block':'none'}"><label>نوع الريل</label><select id="f_subtype">${REEL_TYPES.map(r=>`<option value="${r.id}" ${c&&c.subtype===r.id?'selected':''}>${r.name}</option>`).join('')}</select></div>
       <div class="two">${prioField}${effortField}</div>
       <div class="field"><label>ميعاد التسليم</label><input type="date" id="f_due" value="${c&&c.due?c.due:(presetDue||'')}"></div>
-      <div class="field"><label>لينك البوست (اختياري)</label><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" style="text-align:left"></div>
+      <div class="field"><label>لينك البوست (اختياري)</label><div style="display:flex;gap:6px;align-items:stretch"><input id="f_link" value="${c?escAttr(c.post_link||''):''}" placeholder="https://…" dir="ltr" ${c&&c.post_link?'readonly':''} onclick="openPostLink(this)" style="text-align:left;flex:1;min-width:0;${c&&c.post_link?'cursor:pointer;color:var(--brand)':''}">${c&&c.post_link?`<button type="button" id="f_link_edit" onclick="editPostLink()" title="تعديل اللينك" style="flex:none;width:42px;border-radius:10px;border:1px solid var(--line2);background:var(--raised);color:var(--txt)">✏️</button>`:''}</div></div>
       <div class="field"><label>الكابشن (اختياري)</label><input id="f_caption" value="${c?escAttr(c.caption||''):''}" placeholder="نص البوست…"></div>
       <div class="field"><label>الحالة</label><div class="seg" id="f_status">${statuses.map(s=>`<button data-st="${s.id}" class="${startStatus===s.id?'on':''}">${s.name}</button>`).join('')}</div></div>
       ${canApprove()?`<div class="field"><label>تقييم الفكرة/الشغل (بيدخل في تقييم الموظف)</label><div class="seg" id="f_quality">${QUALITY.map(q=>`<button data-q="${q.v}" class="${c&&c.quality===q.v?'on':''}">${q.name}</button>`).join('')}</div></div>`
